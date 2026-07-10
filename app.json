@@ -1,0 +1,33 @@
+{
+  "expo": {
+    "name": "Cairn",
+    "slug": "cairn",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "cairn",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": false,
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Cairn uses your location to help build a Cairn at the place you are standing."
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Cairn lets you attach photos to your private place journal entries.",
+          "cameraPermission": "Cairn lets you capture photos for your private place journal entries."
+        }
+      ],
+      "expo-font"
+    ],
+    "android": {
+      "package": "com.cairn.placejournal",
+      "softwareKeyboardLayoutMode": "resize"
+    }
+  }
+}
