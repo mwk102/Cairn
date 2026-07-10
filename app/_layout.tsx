@@ -20,7 +20,7 @@ export default function RootLayout() {
           <Stack.Screen name="index" options={{ headerShown: false }} />
           <Stack.Screen name="welcome" options={{ headerShown: false }} />
           <Stack.Screen name="map" options={{ headerShown: false }} />
-          <Stack.Screen name="cairn/build" options={{ title: 'Build a Cairn' }} />
+          <Stack.Screen name="cairn/build" options={{ title: 'Build Cairn' }} />
           <Stack.Screen name="cairn/[id]" options={{ title: 'Cairn' }} />
           <Stack.Screen name="cairn/[id]/edit" options={{ title: 'Edit Cairn' }} />
         </Stack>

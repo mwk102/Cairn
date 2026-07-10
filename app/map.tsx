@@ -19,7 +19,7 @@ import { CairnMarker } from '@/components/CairnMarker';
 import { useCairns } from '@/hooks/useCairns';
 import { useCurrentLocation } from '@/hooks/useCurrentLocation';
 import { colors, spacing, type } from '@/theme';
-import { Cairn } from '@/types/cairn';
+import { Cairn, PLACE_TYPE_ICONS } from '@/types/cairn';
 import { formatDate } from '@/utils/date';
 
 const FALLBACK_REGION = {
@@ -29,6 +29,35 @@ const FALLBACK_REGION = {
   longitudeDelta: 0.18,
 };
 const CAIRN_MARKER_IMAGE = require('../assets/markers/cairn-badge.png');
+
+function CairnBrandMark() {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.brandMark}>
+      <View style={styles.brandStack}>
+        <View style={styles.brandStone0} />
+        <View style={styles.brandStone1} />
+        <View style={styles.brandStone2} />
+        <View style={styles.brandStone3} />
+      </View>
+    </View>
+  );
+}
+
+function BuildCairnGlyph() {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.buildGlyph}>
+      <View style={styles.buildGlyphStack}>
+        <View style={styles.buildStone0} />
+        <View style={styles.buildStone1} />
+        <View style={styles.buildStone2} />
+        <View style={styles.buildStone3} />
+      </View>
+      <View style={styles.buildPlusBadge}>
+        <Feather name="plus" size={13} color={colors.pine} />
+      </View>
+    </View>
+  );
+}
 
 export default function MapHome() {
   const mapRef = useRef<MapView>(null);
@@ -79,6 +108,10 @@ export default function MapHome() {
     return cairn.photos.find((photo) => photo.id === cairn.primaryPhotoId) ?? cairn.photos[0];
   }
 
+  function previewMemoryFor(cairn: Cairn) {
+    return (cairn.story || cairn.notes).trim();
+  }
+
   async function recenterMap() {
     const current = await requestLocation();
     const target = current ?? coordinate;
@@ -124,17 +157,20 @@ export default function MapHome() {
         <View style={[styles.header, { paddingTop: insets.top }]}>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Open My Cairns"
+            accessibilityLabel="Open Cairn menu"
             disabled={loading}
             onPress={() => setMenuOpen(true)}
             style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
           >
             <Feather name="menu" size={20} color={colors.ink} />
           </Pressable>
-          <Text style={styles.headerTitle}>My Cairns</Text>
+          <View style={styles.brand}>
+            <CairnBrandMark />
+            <Text style={styles.headerTitle}>Cairn</Text>
+          </View>
           <Pressable
             accessibilityRole="button"
-            accessibilityLabel="Open My Cairns search"
+            accessibilityLabel="Open Cairn search"
             disabled={loading}
             onPress={() => setMenuOpen(true)}
             style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
@@ -164,14 +200,14 @@ export default function MapHome() {
             <View style={styles.menuHandle} />
             <Text style={styles.panelTitle}>No Cairns yet.</Text>
             <Text style={styles.panelText}>Build your first Cairn to get started.</Text>
-            <Button label="Build a Cairn" onPress={() => router.push('/cairn/build')} style={styles.emptyButton} />
+            <Button label="Build Cairn" onPress={() => router.push('/cairn/build')} style={styles.emptyButton} />
           </View>
         ) : selectedCairn ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={`Open ${selectedCairn.name}`}
             onPress={() => openCairn(selectedCairn)}
-            style={({ pressed }) => [styles.previewCard, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.previewCard, pressed && styles.pressed]}
           >
             <View style={styles.menuHandle} />
             <Pressable
@@ -183,30 +219,52 @@ export default function MapHome() {
               <Feather name="x" size={18} color={colors.muted} />
             </Pressable>
             <View style={styles.previewContent}>
-              {heroPhotoFor(selectedCairn)?.localUri ? (
-                <Image source={{ uri: heroPhotoFor(selectedCairn)?.localUri }} style={styles.previewPhoto} />
-              ) : (
-                <View style={styles.previewPhotoPlaceholder}>
-                  <CairnMarker />
-                </View>
-              )}
+              <View style={styles.previewPhotoWrap}>
+                {heroPhotoFor(selectedCairn)?.localUri ? (
+                  <Image source={{ uri: heroPhotoFor(selectedCairn)?.localUri }} style={styles.previewPhoto} />
+                ) : (
+                  <View style={styles.previewPhotoPlaceholder}>
+                    <CairnMarker />
+                  </View>
+                )}
+                {selectedCairn.isFavorite ? (
+                  <View style={styles.previewFavoriteBadge}>
+                    <MaterialIcons name="star" size={14} color={colors.white} />
+                  </View>
+                ) : null}
+              </View>
               <View style={styles.previewText}>
                 <Text numberOfLines={1} style={styles.previewName}>
                   {selectedCairn.name}
                 </Text>
-                <Text numberOfLines={1} style={styles.previewMeta}>
-                  Built {formatDate(selectedCairn.createdAt)}
-                </Text>
-                <Text numberOfLines={1} style={styles.previewMeta}>
-                  {selectedCairn.placeType}
+                <View style={styles.previewMetaRow}>
+                  <View style={styles.previewTypeChip}>
+                    <Text style={styles.previewTypeText}>
+                      {PLACE_TYPE_ICONS[selectedCairn.placeType]} {selectedCairn.placeType}
+                    </Text>
+                  </View>
+                  <Text numberOfLines={1} style={styles.previewVisited}>
+                    Visited {formatDate(selectedCairn.lastVisitedAt)}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.previewActionColumn}>
+                <Feather name="chevron-right" size={18} color={colors.muted} />
+              </View>
+            </View>
+            {previewMemoryFor(selectedCairn) ? (
+              <View style={styles.previewMemoryBand}>
+                <Text numberOfLines={2} style={styles.previewMemory}>
+                  {previewMemoryFor(selectedCairn)}
                 </Text>
               </View>
-              <MaterialIcons
-                name={selectedCairn.isFavorite ? 'star' : 'star-border'}
-                size={20}
-                color={selectedCairn.isFavorite ? colors.clay : colors.muted}
-              />
-            </View>
+            ) : (
+              <View style={styles.previewMemoryBand}>
+                <Text numberOfLines={1} style={styles.previewMemoryMuted}>
+                  Add a story to remember why this place mattered.
+                </Text>
+              </View>
+            )}
           </Pressable>
         ) : permissionDenied ? (
           <View style={styles.notice}>
@@ -216,11 +274,11 @@ export default function MapHome() {
       </View>
       <Pressable
         accessibilityRole="button"
-        accessibilityLabel="Build a Cairn"
+        accessibilityLabel="Build Cairn"
         onPress={() => router.push('/cairn/build')}
-        style={styles.fab}
+        style={[styles.fab, selectedCairn && styles.fabRaised]}
       >
-        <Feather name="plus" size={28} color={colors.white} />
+        <BuildCairnGlyph />
       </Pressable>
       <Modal
         animationType="slide"
@@ -232,10 +290,13 @@ export default function MapHome() {
         <View style={[styles.menuSheet, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
           <View style={styles.menuHandle} />
           <View style={styles.menuHeader}>
-            <Text style={styles.menuTitle}>My Cairns</Text>
+            <View style={styles.menuBrand}>
+              <CairnBrandMark />
+              <Text style={styles.menuTitle}>Cairn</Text>
+            </View>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Close My Cairns"
+              accessibilityLabel="Close Cairn menu"
               onPress={() => setMenuOpen(false)}
               style={styles.closeButton}
             >
@@ -294,7 +355,7 @@ export default function MapHome() {
                       {item.name}
                     </Text>
                     <Text numberOfLines={1} style={styles.cairnMeta}>
-                      {item.placeType} - Built {formatDate(item.createdAt)}
+                      {PLACE_TYPE_ICONS[item.placeType]} {item.placeType} - Last visited {formatDate(item.lastVisitedAt)}
                     </Text>
                   </View>
                   <MaterialIcons
@@ -322,15 +383,15 @@ const styles = StyleSheet.create({
     paddingBottom: spacing.md,
   },
   header: {
-    minHeight: 48,
-    backgroundColor: colors.paper,
+    minHeight: 56,
+    backgroundColor: colors.sage,
     alignItems: 'center',
     flexDirection: 'row',
     justifyContent: 'space-between',
     marginHorizontal: -spacing.md,
     paddingHorizontal: spacing.sm,
     borderBottomWidth: 1,
-    borderBottomColor: colors.line,
+    borderBottomColor: 'rgba(49, 86, 66, 0.18)',
   },
   headerButton: {
     width: 46,
@@ -343,8 +404,72 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     color: colors.ink,
-    fontSize: 15,
-    fontWeight: '800',
+    fontSize: 16,
+    fontWeight: '900',
+    letterSpacing: 4,
+    textTransform: 'uppercase',
+  },
+  brand: {
+    position: 'absolute',
+    left: 86,
+    right: 86,
+    bottom: 13,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+  },
+  brandMark: {
+    width: 32,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  brandStack: {
+    alignItems: 'center',
+  },
+  brandStone0: {
+    width: 8,
+    height: 5,
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 7,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 4,
+    backgroundColor: colors.ink,
+    marginBottom: 1,
+    transform: [{ rotate: '-7deg' }, { translateX: 1 }],
+  },
+  brandStone1: {
+    width: 14,
+    height: 5,
+    borderTopLeftRadius: 7,
+    borderTopRightRadius: 5,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 8,
+    backgroundColor: colors.ink,
+    marginBottom: 2,
+    transform: [{ rotate: '5deg' }, { translateX: -1 }],
+  },
+  brandStone2: {
+    width: 23,
+    height: 6,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 11,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 8,
+    backgroundColor: colors.ink,
+    marginBottom: 1,
+    transform: [{ rotate: '-3deg' }, { translateX: 1 }],
+  },
+  brandStone3: {
+    width: 31,
+    height: 7,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 9,
+    borderBottomRightRadius: 13,
+    backgroundColor: colors.ink,
+    transform: [{ rotate: '2deg' }],
   },
   locateButton: {
     width: 44,
@@ -406,6 +531,74 @@ const styles = StyleSheet.create({
     backgroundColor: colors.moss,
     elevation: 5,
   },
+  buildGlyph: {
+    width: 40,
+    height: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  buildGlyphStack: {
+    alignItems: 'center',
+  },
+  buildStone0: {
+    width: 8,
+    height: 5,
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 7,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 4,
+    backgroundColor: colors.white,
+    marginBottom: 2,
+    transform: [{ rotate: '-7deg' }, { translateX: 1 }],
+  },
+  buildStone1: {
+    width: 16,
+    height: 5,
+    borderTopLeftRadius: 7,
+    borderTopRightRadius: 5,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 8,
+    backgroundColor: colors.white,
+    marginBottom: 2,
+    transform: [{ rotate: '5deg' }, { translateX: -1 }],
+  },
+  buildStone2: {
+    width: 25,
+    height: 7,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 11,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 8,
+    backgroundColor: colors.white,
+    marginBottom: 2,
+    transform: [{ rotate: '-3deg' }, { translateX: 1 }],
+  },
+  buildStone3: {
+    width: 34,
+    height: 8,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 9,
+    borderBottomRightRadius: 13,
+    backgroundColor: colors.white,
+    transform: [{ rotate: '2deg' }],
+  },
+  buildPlusBadge: {
+    position: 'absolute',
+    right: -2,
+    top: 0,
+    width: 18,
+    height: 18,
+    borderRadius: 9,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: 'rgba(25, 53, 38, 0.22)',
+  },
+  fabRaised: {
+    bottom: 304,
+  },
   emptyButton: {
     minWidth: 180,
     marginTop: spacing.sm,
@@ -414,10 +607,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     backgroundColor: colors.paper,
     borderWidth: 1,
-    borderColor: colors.line,
-    paddingHorizontal: spacing.sm,
+    borderColor: 'rgba(49, 86, 66, 0.22)',
+    paddingHorizontal: spacing.md,
     paddingTop: spacing.xs,
-    paddingBottom: spacing.sm,
+    paddingBottom: spacing.md,
     marginBottom: spacing.sm,
   },
   previewClose: {
@@ -433,20 +626,37 @@ const styles = StyleSheet.create({
   previewContent: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: spacing.sm,
+    gap: spacing.md,
+  },
+  previewPhotoWrap: {
+    width: 64,
+    height: 64,
   },
   previewPhoto: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
     borderRadius: 8,
   },
   previewPhotoPlaceholder: {
-    width: 56,
-    height: 56,
+    width: 64,
+    height: 64,
     borderRadius: 8,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.cream,
+  },
+  previewFavoriteBadge: {
+    position: 'absolute',
+    right: -4,
+    bottom: -4,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.clay,
+    borderWidth: 2,
+    borderColor: colors.paper,
   },
   previewText: {
     flex: 1,
@@ -454,13 +664,57 @@ const styles = StyleSheet.create({
   },
   previewName: {
     color: colors.ink,
-    fontSize: 15,
+    fontSize: 18,
     fontWeight: '900',
   },
-  previewMeta: {
+  previewMetaRow: {
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  previewTypeChip: {
+    minHeight: 28,
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.18)',
+    backgroundColor: colors.sage,
+    paddingHorizontal: spacing.sm,
+  },
+  previewTypeText: {
+    color: colors.ink,
+    fontSize: type.small,
+    fontWeight: '800',
+  },
+  previewVisited: {
     color: colors.muted,
     fontSize: 13,
-    marginTop: 2,
+    flexShrink: 1,
+  },
+  previewActionColumn: {
+    width: 24,
+    alignItems: 'center',
+  },
+  previewMemory: {
+    color: colors.ink,
+    fontSize: type.small,
+    lineHeight: 19,
+  },
+  previewMemoryMuted: {
+    color: colors.muted,
+    fontSize: type.small,
+    fontStyle: 'italic',
+  },
+  previewMemoryBand: {
+    borderRadius: 8,
+    backgroundColor: 'rgba(203, 216, 198, 0.46)',
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    marginTop: spacing.sm,
   },
   modalBackdrop: {
     flex: 1,
@@ -493,6 +747,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  menuBrand: {
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   filterRow: {
     flexDirection: 'row',

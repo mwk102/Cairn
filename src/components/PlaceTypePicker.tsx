@@ -1,7 +1,7 @@
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 
 import { colors, spacing } from '@/theme';
-import { PLACE_TYPES, PlaceType } from '@/types/cairn';
+import { PLACE_TYPE_ICONS, PLACE_TYPES, PlaceType } from '@/types/cairn';
 
 type Props = {
   value: PlaceType;
@@ -16,11 +16,13 @@ export function PlaceTypePicker({ value, onChange }: Props) {
         return (
           <Pressable
             accessibilityRole="button"
+            accessibilityLabel={placeType}
             accessibilityState={{ selected }}
             key={placeType}
             onPress={() => onChange(placeType)}
             style={[styles.chip, selected && styles.selected]}
           >
+            <Text style={styles.icon}>{PLACE_TYPE_ICONS[placeType]}</Text>
             <Text style={[styles.label, selected && styles.selectedLabel]}>{placeType}</Text>
           </Pressable>
         );
@@ -36,12 +38,18 @@ const styles = StyleSheet.create({
   },
   chip: {
     minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
     justifyContent: 'center',
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.line,
     paddingHorizontal: spacing.md,
     backgroundColor: colors.white,
+  },
+  icon: {
+    fontSize: 17,
   },
   selected: {
     backgroundColor: colors.moss,

@@ -12,6 +12,18 @@ export const PLACE_TYPES = [
 
 export type PlaceType = (typeof PLACE_TYPES)[number];
 
+export const PLACE_TYPE_ICONS: Record<PlaceType, string> = {
+  Campsite: '🏕',
+  'Fishing Spot': '🎣',
+  Trailhead: '🥾',
+  Viewpoint: '🌅',
+  Waterfall: '💧',
+  'Boat Launch': '🛶',
+  'Foraging Area': '🍄',
+  'Wildflower Meadow': '🌸',
+  Other: '📍',
+};
+
 export type CairnPhoto = {
   id: string;
   cairnId: string;
@@ -22,6 +34,7 @@ export type CairnPhoto = {
 export type Cairn = {
   id: string;
   name: string;
+  story: string;
   notes: string;
   latitude: number;
   longitude: number;
@@ -36,11 +49,13 @@ export type Cairn = {
 
 export type CairnInput = {
   name: string;
+  story: string;
   notes: string;
   latitude: number;
   longitude: number;
   placeType: PlaceType;
   isFavorite: boolean;
+  lastVisitedAt?: string;
   primaryPhotoId?: string | null;
   primaryPhotoUri?: string | null;
   photos: string[];

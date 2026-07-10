@@ -22,6 +22,7 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS cairns (
       id TEXT PRIMARY KEY NOT NULL,
       name TEXT NOT NULL,
+      story TEXT NOT NULL DEFAULT '',
       notes TEXT NOT NULL,
       latitude REAL NOT NULL,
       longitude REAL NOT NULL,
@@ -45,5 +46,8 @@ export async function initDb() {
   const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(cairns)');
   if (!columns.some((column) => column.name === 'primaryPhotoId')) {
     await db.execAsync('ALTER TABLE cairns ADD COLUMN primaryPhotoId TEXT;');
+  }
+  if (!columns.some((column) => column.name === 'story')) {
+    await db.execAsync("ALTER TABLE cairns ADD COLUMN story TEXT NOT NULL DEFAULT '';");
   }
 }

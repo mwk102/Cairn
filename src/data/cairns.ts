@@ -71,10 +71,11 @@ export async function createCairn(input: CairnInput) {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO cairns
-      (id, name, notes, latitude, longitude, placeType, isFavorite, primaryPhotoId, createdAt, updatedAt, lastVisitedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, name, story, notes, latitude, longitude, placeType, isFavorite, primaryPhotoId, createdAt, updatedAt, lastVisitedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       input.name.trim(),
+      input.story.trim(),
       input.notes.trim(),
       input.latitude,
       input.longitude,
@@ -103,6 +104,7 @@ export async function updateCairn(id: string, input: CairnInput) {
   await initDb();
   const db = await getDb();
   const now = new Date().toISOString();
+  const lastVisitedAt = input.lastVisitedAt ?? now;
   const previous = await getCairn(id);
   const photoIdByUri = new Map(previous?.photos.map((photo) => [photo.localUri, photo.id]) ?? []);
   const photoIds = input.photos.map((localUri) => photoIdByUri.get(localUri) ?? Crypto.randomUUID());
@@ -118,16 +120,18 @@ export async function updateCairn(id: string, input: CairnInput) {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE cairns SET
-        name = ?, notes = ?, latitude = ?, longitude = ?, placeType = ?,
-        isFavorite = ?, primaryPhotoId = ?, updatedAt = ?
+        name = ?, story = ?, notes = ?, latitude = ?, longitude = ?, placeType = ?,
+        isFavorite = ?, primaryPhotoId = ?, lastVisitedAt = ?, updatedAt = ?
       WHERE id = ?`,
       input.name.trim(),
+      input.story.trim(),
       input.notes.trim(),
       input.latitude,
       input.longitude,
       input.placeType,
       input.isFavorite ? 1 : 0,
       primaryPhotoId,
+      lastVisitedAt,
       now,
       id,
     );

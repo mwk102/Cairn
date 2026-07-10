@@ -7,9 +7,10 @@ export function CairnMarker() {
     <View collapsable={false} pointerEvents="none" style={styles.wrap}>
       <View collapsable={false} style={styles.badge}>
         <View collapsable={false} style={styles.stack}>
-          <View style={styles.stoneSmall} />
-          <View style={styles.stoneMid} />
-          <View style={styles.stoneLarge} />
+          <View style={styles.stone0} />
+          <View style={styles.stone1} />
+          <View style={styles.stone2} />
+          <View style={styles.stone3} />
         </View>
       </View>
     </View>
@@ -39,29 +40,52 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
   },
   stack: {
-    width: 22,
-    height: 21,
+    width: 26,
+    height: 25,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  stoneSmall: {
-    width: 8,
+  stone0: {
+    width: 7,
     height: 5,
-    borderRadius: 8,
+    borderTopLeftRadius: 5,
+    borderTopRightRadius: 7,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 4,
+    backgroundColor: colors.white,
+    marginBottom: 1,
+    transform: [{ rotate: '-7deg' }, { translateX: 1 }],
+  },
+  stone1: {
+    width: 13,
+    height: 5,
+    borderTopLeftRadius: 7,
+    borderTopRightRadius: 5,
+    borderBottomLeftRadius: 4,
+    borderBottomRightRadius: 8,
     backgroundColor: colors.white,
     marginBottom: 2,
+    transform: [{ rotate: '5deg' }, { translateX: -1 }],
   },
-  stoneMid: {
-    width: 15,
-    height: 5,
-    borderRadius: 9,
+  stone2: {
+    width: 20,
+    height: 6,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 11,
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 8,
     backgroundColor: colors.white,
-    marginBottom: 2,
+    marginBottom: 1,
+    transform: [{ rotate: '-3deg' }, { translateX: 1 }],
   },
-  stoneLarge: {
-    width: 21,
-    height: 5,
-    borderRadius: 10,
+  stone3: {
+    width: 25,
+    height: 6,
+    borderTopLeftRadius: 12,
+    borderTopRightRadius: 8,
+    borderBottomLeftRadius: 9,
+    borderBottomRightRadius: 13,
     backgroundColor: colors.white,
+    transform: [{ rotate: '2deg' }],
   },
 });

@@ -1,7 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Switch, Text, View } from 'react-native';
+import {
+  ActivityIndicator,
+  Image,
+  Keyboard,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Switch,
+  Text,
+  View,
+} from 'react-native';
 import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { Feather } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 
 import { Button } from '@/components/Button';
 import { Field } from '@/components/Field';
@@ -10,7 +24,14 @@ import { PlaceTypePicker } from '@/components/PlaceTypePicker';
 import { Coordinate, useCurrentLocation } from '@/hooks/useCurrentLocation';
 import { colors, spacing, type } from '@/theme';
 import { Cairn, CairnInput, PlaceType } from '@/types/cairn';
-import { formatCoordinate } from '@/utils/date';
+import {
+  CoordinateParseResult,
+  formatCoordinates,
+  formatCoordinateValue,
+  parseCoordinateInput,
+  validateCoordinates,
+} from '@/utils/coordinates';
+import { formatDateInput, parseDateInput } from '@/utils/date';
 
 const FALLBACK_COORDINATE = { latitude: 47.6205, longitude: -122.3493 };
 const CAIRN_MARKER_IMAGE = require('../../assets/markers/cairn-badge.png');
@@ -25,12 +46,14 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
   const mapRef = useRef<MapView>(null);
   const scrollRef = useRef<ScrollView>(null);
   const nameTopRef = useRef(0);
+  const storyTopRef = useRef(0);
   const notesTopRef = useRef(0);
   const { requestLocation, permissionDenied } = useCurrentLocation();
   const [coordinate, setCoordinate] = useState<Coordinate>(
     initial ? { latitude: initial.latitude, longitude: initial.longitude } : FALLBACK_COORDINATE,
   );
   const [name, setName] = useState(initial?.name ?? '');
+  const [story, setStory] = useState(initial?.story ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [placeType, setPlaceType] = useState<PlaceType>(initial?.placeType ?? 'Campsite');
   const [isFavorite, setIsFavorite] = useState(initial?.isFavorite ?? false);
@@ -39,23 +62,27 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
   const [primaryPhotoUri, setPrimaryPhotoUri] = useState<string | null>(initialPrimaryPhoto?.localUri ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [latitudeText, setLatitudeText] = useState(formatCoordinate(coordinate.latitude));
-  const [longitudeText, setLongitudeText] = useState(formatCoordinate(coordinate.longitude));
+  const [lastVisitedText, setLastVisitedText] = useState(initial ? formatDateInput(initial.lastVisitedAt) : '');
+  const [lastVisitedError, setLastVisitedError] = useState<string | null>(null);
+  const [latitudeText, setLatitudeText] = useState(formatCoordinateValue(coordinate.latitude));
+  const [longitudeText, setLongitudeText] = useState(formatCoordinateValue(coordinate.longitude));
+  const [coordinateInput, setCoordinateInput] = useState(formatCoordinates(coordinate));
+  const [coordinateInputDirty, setCoordinateInputDirty] = useState(false);
   const [coordinateError, setCoordinateError] = useState<string | null>(null);
+  const [swapSuggestion, setSwapSuggestion] = useState<Coordinate | null>(null);
+  const [locating, setLocating] = useState(false);
+  const [chooserOpen, setChooserOpen] = useState(false);
+  const [draftCoordinate, setDraftCoordinate] = useState<Coordinate>(coordinate);
 
   function updateCoordinate(next: Coordinate) {
     setCoordinate(next);
-    setLatitudeText(formatCoordinate(next.latitude));
-    setLongitudeText(formatCoordinate(next.longitude));
+    setLatitudeText(formatCoordinateValue(next.latitude));
+    setLongitudeText(formatCoordinateValue(next.longitude));
+    setCoordinateInput(formatCoordinates(next));
+    setCoordinateInputDirty(false);
     setCoordinateError(null);
+    setSwapSuggestion(null);
   }
-
-  useEffect(() => {
-    if (initial) return;
-    requestLocation().then((current) => {
-      if (current) updateCoordinate(current);
-    });
-  }, [initial, requestLocation]);
 
   const region = useMemo(
     () => ({
@@ -71,22 +98,104 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
     mapRef.current?.animateToRegion(region, 350);
   }, [region]);
 
+  const draftRegion = useMemo(
+    () => ({
+      latitude: draftCoordinate.latitude,
+      longitude: draftCoordinate.longitude,
+      latitudeDelta: 0.01,
+      longitudeDelta: 0.01,
+    }),
+    [draftCoordinate],
+  );
+
+  function clearCoordinateFeedback() {
+    setCoordinateError(null);
+    setSwapSuggestion(null);
+  }
+
+  function applyCoordinateResult(result: CoordinateParseResult, visibleText?: string) {
+    if (result.status === 'valid') {
+      updateCoordinate(result.coordinate);
+      return result.coordinate;
+    }
+
+    if (result.status === 'potentially-reversed') {
+      setCoordinateError(result.message);
+      setSwapSuggestion(result.swapped);
+      setLatitudeText(formatCoordinateValue(result.coordinate.latitude));
+      setLongitudeText(formatCoordinateValue(result.coordinate.longitude));
+      setCoordinateInput(visibleText ?? result.normalized);
+      return null;
+    }
+
+    setCoordinateError(result.message);
+    setSwapSuggestion(null);
+    return null;
+  }
+
+  function applyCombinedCoordinate() {
+    const input = coordinateInput.trim();
+    const result = parseCoordinateInput(input);
+
+    return applyCoordinateResult(result, input);
+  }
+
   function applyManualCoordinate() {
-    const latitude = Number(latitudeText.trim());
-    const longitude = Number(longitudeText.trim());
+    const latitudeValue = latitudeText.trim();
+    const longitudeValue = longitudeText.trim();
 
-    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) {
-      setCoordinateError('Latitude must be between -90 and 90.');
+    if (!latitudeValue || !longitudeValue) {
+      setCoordinateError('Enter both latitude and longitude.');
+      setSwapSuggestion(null);
       return false;
     }
 
-    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) {
-      setCoordinateError('Longitude must be between -180 and 180.');
+    const latitude = Number(latitudeValue);
+    const longitude = Number(longitudeValue);
+
+    if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+      setCoordinateError('We couldn\'t recognize those coordinates.');
+      setSwapSuggestion(null);
       return false;
     }
 
-    updateCoordinate({ latitude, longitude });
-    return true;
+    return applyCoordinateResult(validateCoordinates(latitude, longitude));
+  }
+
+  async function pasteCoordinates() {
+    const text = await Clipboard.getStringAsync();
+
+    setCoordinateInput(text);
+    setCoordinateInputDirty(true);
+    applyCoordinateResult(parseCoordinateInput(text), text);
+  }
+
+  async function useDeviceLocation() {
+    setLocating(true);
+    clearCoordinateFeedback();
+    try {
+      const current = await requestLocation();
+
+      if (current) {
+        updateCoordinate(current);
+        return;
+      }
+
+      setCoordinateError('We couldn\'t access your current location. You can still paste coordinates or choose the place on the map.');
+    } finally {
+      setLocating(false);
+    }
+  }
+
+  function openChooser() {
+    Keyboard.dismiss();
+    setDraftCoordinate(coordinate);
+    setChooserOpen(true);
+  }
+
+  function confirmChosenLocation() {
+    updateCoordinate(draftCoordinate);
+    setChooserOpen(false);
   }
 
   async function save() {
@@ -94,10 +203,24 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
       setError('Name this place before saving.');
       return;
     }
-    if (!applyManualCoordinate()) {
+    let lastVisitedAt: string | undefined;
+
+    if (initial) {
+      const parsedLastVisitedAt = parseDateInput(lastVisitedText);
+
+      if (!parsedLastVisitedAt) {
+        setLastVisitedError('Use YYYY-MM-DD, like 2024-07-09.');
+        return;
+      }
+
+      lastVisitedAt = parsedLastVisitedAt;
+    }
+    const coordinateToSave = coordinateInputDirty ? applyCombinedCoordinate() : applyManualCoordinate();
+
+    if (!coordinateToSave) {
       return;
     }
-    if (!Number.isFinite(coordinate.latitude) || !Number.isFinite(coordinate.longitude)) {
+    if (!Number.isFinite(coordinateToSave.latitude) || !Number.isFinite(coordinateToSave.longitude)) {
       setError('Choose a valid Cairn location.');
       return;
     }
@@ -106,11 +229,13 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
     try {
       await onSubmit({
         name,
+        story,
         notes,
-        latitude: coordinate.latitude,
-        longitude: coordinate.longitude,
+        latitude: coordinateToSave.latitude,
+        longitude: coordinateToSave.longitude,
         placeType,
         isFavorite,
+        lastVisitedAt,
         primaryPhotoId: initial?.primaryPhotoId ?? null,
         primaryPhotoUri,
         photos,
@@ -124,6 +249,15 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
     window.setTimeout(() => {
       scrollRef.current?.scrollTo({
         y: Math.max(notesTopRef.current - 96, 0),
+        animated: true,
+      });
+    }, 250);
+  }
+
+  function scrollStoryIntoView() {
+    window.setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.max(storyTopRef.current - 96, 0),
         animated: true,
       });
     }, 250);
@@ -151,28 +285,59 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
         keyboardShouldPersistTaps="handled"
       >
         <Text style={styles.prompt}>What did you discover today?</Text>
-        <View style={styles.mapWrap}>
-          <MapView
-            ref={mapRef}
-            provider={PROVIDER_GOOGLE}
-            style={StyleSheet.absoluteFill}
-            initialRegion={region}
-            onPress={(event) => updateCoordinate(event.nativeEvent.coordinate)}
-          >
-            <Marker
-              anchor={{ x: 0.5, y: 0.5 }}
-              coordinate={coordinate}
-              draggable
-              image={CAIRN_MARKER_IMAGE}
-              onDragEnd={(event) => updateCoordinate(event.nativeEvent.coordinate)}
-            />
-          </MapView>
-        </View>
         <View style={styles.coordinateBox}>
           <Text style={styles.coordinateLabel}>Cairn Location</Text>
           <Text style={styles.coordinate}>
-            {formatCoordinate(coordinate.latitude)}, {formatCoordinate(coordinate.longitude)}
+            {formatCoordinates(coordinate)}
           </Text>
+          <View style={styles.locationActions}>
+            <Button
+              label={locating ? 'Locating...' : 'Use Current Location'}
+              onPress={useDeviceLocation}
+              disabled={locating}
+              style={styles.locationAction}
+              accessibilityLabel="Use Current Location"
+            />
+            <Button
+              label="Choose on Map"
+              onPress={openChooser}
+              variant="secondary"
+              style={styles.locationAction}
+              accessibilityLabel="Choose on Map"
+            />
+          </View>
+          {locating ? (
+            <View style={styles.locatingRow}>
+              <ActivityIndicator color={colors.moss} />
+              <Text style={styles.help}>Finding your current location...</Text>
+            </View>
+          ) : null}
+          <View style={styles.pasteRow}>
+            <Field
+              label="Paste coordinates"
+              value={coordinateInput}
+              onBlur={applyCombinedCoordinate}
+              onChangeText={(value) => {
+                setCoordinateInput(value);
+                setCoordinateInputDirty(true);
+                clearCoordinateFeedback();
+              }}
+              placeholder="47.90081, -119.17627"
+              autoCapitalize="none"
+              autoCorrect={false}
+              containerStyle={styles.pasteField}
+              accessibilityLabel="Paste coordinates"
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Paste coordinates from clipboard"
+              onPress={pasteCoordinates}
+              style={({ pressed }) => [styles.pasteButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.pasteButtonText}>Paste</Text>
+            </Pressable>
+          </View>
+          <Text style={styles.help}>Paste coordinates from Google Maps or another map app.</Text>
           <View style={styles.coordinateFields}>
             <Field
               label="Latitude"
@@ -180,7 +345,8 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
               onBlur={applyManualCoordinate}
               onChangeText={(value) => {
                 setLatitudeText(value);
-                setCoordinateError(null);
+                setCoordinateInputDirty(false);
+                clearCoordinateFeedback();
               }}
               placeholder="47.62050"
               keyboardType="numbers-and-punctuation"
@@ -196,7 +362,8 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
               onBlur={applyManualCoordinate}
               onChangeText={(value) => {
                 setLongitudeText(value);
-                setCoordinateError(null);
+                setCoordinateInputDirty(false);
+                clearCoordinateFeedback();
               }}
               placeholder="-122.34930"
               keyboardType="numbers-and-punctuation"
@@ -208,12 +375,38 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
             />
           </View>
           {coordinateError ? <Text style={styles.errorText}>{coordinateError}</Text> : null}
-          <Pressable accessibilityRole="button" onPress={() => requestLocation().then((current) => current && updateCoordinate(current))}>
-            <Text style={styles.useCurrent}>Use current</Text>
-          </Pressable>
+          {swapSuggestion ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Swap latitude and longitude"
+              onPress={() => updateCoordinate(swapSuggestion)}
+              style={({ pressed }) => [styles.swapButton, pressed && styles.pressed]}
+            >
+              <Feather name="repeat" size={16} color={colors.moss} />
+              <Text style={styles.swapText}>Swap them</Text>
+            </Pressable>
+          ) : null}
+          <View style={styles.mapWrap}>
+            <MapView
+              ref={mapRef}
+              provider={PROVIDER_GOOGLE}
+              style={StyleSheet.absoluteFill}
+              initialRegion={region}
+              pitchEnabled={false}
+              rotateEnabled={false}
+              scrollEnabled={false}
+              zoomEnabled={false}
+            >
+              <Marker
+                anchor={{ x: 0.5, y: 0.5 }}
+                coordinate={coordinate}
+                image={CAIRN_MARKER_IMAGE}
+              />
+            </MapView>
+          </View>
         </View>
         {permissionDenied ? (
-          <Text style={styles.help}>Location permission is off. You can still place this Cairn manually on the map.</Text>
+          <Text style={styles.help}>Location permission is off. You can still paste coordinates or choose the place on the map.</Text>
         ) : null}
         <View onLayout={(event) => {
           nameTopRef.current = event.nativeEvent.layout.y;
@@ -231,6 +424,36 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
           <Text style={styles.label}>Place type</Text>
           <PlaceTypePicker value={placeType} onChange={setPlaceType} />
         </View>
+        {initial ? (
+          <Field
+            label="Last visited"
+            value={lastVisitedText}
+            onChangeText={(value) => {
+              setLastVisitedText(value);
+              setLastVisitedError(null);
+            }}
+            placeholder="2024-07-09"
+            keyboardType="numbers-and-punctuation"
+            inputMode="numeric"
+            autoCapitalize="none"
+            autoCorrect={false}
+            error={lastVisitedError ?? undefined}
+          />
+        ) : null}
+        <View onLayout={(event) => {
+          storyTopRef.current = event.nativeEvent.layout.y;
+        }}>
+          <Field
+            label="Story"
+            value={story}
+            onChangeText={setStory}
+            onFocus={scrollStoryIntoView}
+            placeholder="Why did this place matter?"
+            multiline
+            maxLength={800}
+            style={styles.story}
+          />
+        </View>
         <View onLayout={(event) => {
           notesTopRef.current = event.nativeEvent.layout.y;
         }}>
@@ -239,7 +462,7 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
             value={notes}
             onChangeText={setNotes}
             onFocus={scrollNotesIntoView}
-            placeholder="Add notes about this place..."
+            placeholder="Road conditions, cell service, toilets, fire rings..."
             multiline
             maxLength={500}
             style={styles.notes}
@@ -277,13 +500,55 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
         ) : null}
         <View style={styles.favoriteRow}>
           <View>
-            <Text style={styles.label}>Remember as important</Text>
-            <Text style={styles.help}>Marks this Cairn for your own return list.</Text>
+            <Text style={styles.label}>Favorite</Text>
+            <Text style={styles.help}>Keep this place easy to find again.</Text>
           </View>
           <Switch value={isFavorite} onValueChange={setIsFavorite} trackColor={{ true: colors.fern }} />
         </View>
         <Button label={submitLabel} onPress={save} disabled={saving} />
       </ScrollView>
+      <Modal visible={chooserOpen} animationType="slide" onRequestClose={() => setChooserOpen(false)}>
+        <View style={styles.chooserScreen}>
+          <View style={styles.chooserHeader}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Cancel choosing location"
+              onPress={() => setChooserOpen(false)}
+              style={({ pressed }) => [styles.chooserHeaderButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.chooserHeaderText}>Cancel</Text>
+            </Pressable>
+            <Text style={styles.chooserTitle}>Choose Location</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Confirm chosen location"
+              onPress={confirmChosenLocation}
+              style={({ pressed }) => [styles.chooserHeaderButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.chooserHeaderText}>Use</Text>
+            </Pressable>
+          </View>
+          <MapView
+            provider={PROVIDER_GOOGLE}
+            style={styles.chooserMap}
+            initialRegion={draftRegion}
+            onPress={(event) => setDraftCoordinate(event.nativeEvent.coordinate)}
+          >
+            <Marker
+              anchor={{ x: 0.5, y: 0.5 }}
+              coordinate={draftCoordinate}
+              draggable
+              image={CAIRN_MARKER_IMAGE}
+              onDragEnd={(event) => setDraftCoordinate(event.nativeEvent.coordinate)}
+            />
+          </MapView>
+          <View style={styles.chooserFooter}>
+            <Text style={styles.coordinateLabel}>Selected location</Text>
+            <Text style={styles.coordinate}>{formatCoordinates(draftCoordinate)}</Text>
+            <Text style={styles.help}>Tap the map or drag the marker to adjust this Cairn.</Text>
+          </View>
+        </View>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -325,6 +590,44 @@ const styles = StyleSheet.create({
   coordinate: {
     color: colors.muted,
   },
+  locationActions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  locationAction: {
+    flex: 1,
+    minHeight: 48,
+    paddingHorizontal: spacing.sm,
+  },
+  locatingRow: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  pasteRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+  },
+  pasteField: {
+    flex: 1,
+    minWidth: 0,
+  },
+  pasteButton: {
+    minWidth: 72,
+    minHeight: 50,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+  },
+  pasteButtonText: {
+    color: colors.ink,
+    fontWeight: '800',
+  },
   coordinateFields: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -340,10 +643,21 @@ const styles = StyleSheet.create({
     color: colors.danger,
     fontSize: type.small,
   },
-  useCurrent: {
+  swapButton: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    alignSelf: 'flex-start',
+    paddingVertical: spacing.xs,
+    paddingRight: spacing.sm,
+  },
+  swapText: {
     color: colors.moss,
     fontWeight: '800',
-    paddingVertical: spacing.sm,
+  },
+  pressed: {
+    opacity: 0.7,
   },
   group: {
     gap: spacing.xs,
@@ -354,6 +668,10 @@ const styles = StyleSheet.create({
   },
   notes: {
     minHeight: 120,
+    textAlignVertical: 'top',
+  },
+  story: {
+    minHeight: 150,
     textAlignVertical: 'top',
   },
   heroOptions: {
@@ -396,5 +714,43 @@ const styles = StyleSheet.create({
   help: {
     color: colors.muted,
     flexShrink: 1,
+  },
+  chooserScreen: {
+    flex: 1,
+    backgroundColor: colors.cream,
+  },
+  chooserHeader: {
+    minHeight: 72,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    backgroundColor: colors.paper,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.line,
+  },
+  chooserHeaderButton: {
+    minWidth: 64,
+    minHeight: 44,
+    justifyContent: 'center',
+  },
+  chooserHeaderText: {
+    color: colors.moss,
+    fontWeight: '800',
+  },
+  chooserTitle: {
+    color: colors.ink,
+    fontWeight: '900',
+  },
+  chooserMap: {
+    flex: 1,
+  },
+  chooserFooter: {
+    gap: spacing.xs,
+    padding: spacing.md,
+    backgroundColor: colors.paper,
+    borderTopWidth: 1,
+    borderTopColor: colors.line,
   },
 });
