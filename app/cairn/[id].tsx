@@ -192,7 +192,7 @@ export default function CairnDetail() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: cairn.name }} />
+      <Stack.Screen options={{ title: '' }} />
       {primaryPhoto ? (
         <Pressable
           accessibilityRole="imagebutton"

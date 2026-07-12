@@ -13,9 +13,10 @@ import {
   Text,
   View,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Marker, PROVIDER_GOOGLE, Region } from 'react-native-maps';
 import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { Field } from '@/components/Field';
@@ -42,12 +43,24 @@ type Props = {
   onSubmit: (input: CairnInput) => Promise<void>;
 };
 
+function MiniCairnGlyph() {
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.miniCairn}>
+      <View style={styles.miniStone0} />
+      <View style={styles.miniStone1} />
+      <View style={styles.miniStone2} />
+    </View>
+  );
+}
+
 export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
   const mapRef = useRef<MapView>(null);
+  const chooserMapRef = useRef<MapView>(null);
   const scrollRef = useRef<ScrollView>(null);
   const nameTopRef = useRef(0);
   const storyTopRef = useRef(0);
   const notesTopRef = useRef(0);
+  const insets = useSafeAreaInsets();
   const { requestLocation, permissionDenied } = useCurrentLocation();
   const [coordinate, setCoordinate] = useState<Coordinate>(
     initial ? { latitude: initial.latitude, longitude: initial.longitude } : FALLBACK_COORDINATE,
@@ -66,19 +79,22 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
   const [lastVisitedError, setLastVisitedError] = useState<string | null>(null);
   const [latitudeText, setLatitudeText] = useState(formatCoordinateValue(coordinate.latitude));
   const [longitudeText, setLongitudeText] = useState(formatCoordinateValue(coordinate.longitude));
-  const [coordinateInput, setCoordinateInput] = useState(formatCoordinates(coordinate));
+  const [coordinateInput, setCoordinateInput] = useState('');
   const [coordinateInputDirty, setCoordinateInputDirty] = useState(false);
   const [coordinateError, setCoordinateError] = useState<string | null>(null);
   const [swapSuggestion, setSwapSuggestion] = useState<Coordinate | null>(null);
   const [locating, setLocating] = useState(false);
   const [chooserOpen, setChooserOpen] = useState(false);
+  const [chooserLocating, setChooserLocating] = useState(false);
+  const [manualCoordinatesOpen, setManualCoordinatesOpen] = useState(false);
   const [draftCoordinate, setDraftCoordinate] = useState<Coordinate>(coordinate);
+  const [draftMoving, setDraftMoving] = useState(false);
 
   function updateCoordinate(next: Coordinate) {
     setCoordinate(next);
     setLatitudeText(formatCoordinateValue(next.latitude));
     setLongitudeText(formatCoordinateValue(next.longitude));
-    setCoordinateInput(formatCoordinates(next));
+    setCoordinateInput('');
     setCoordinateInputDirty(false);
     setCoordinateError(null);
     setSwapSuggestion(null);
@@ -102,8 +118,8 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
     () => ({
       latitude: draftCoordinate.latitude,
       longitude: draftCoordinate.longitude,
-      latitudeDelta: 0.01,
-      longitudeDelta: 0.01,
+      latitudeDelta: 0.006,
+      longitudeDelta: 0.006,
     }),
     [draftCoordinate],
   );
@@ -191,6 +207,44 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
     Keyboard.dismiss();
     setDraftCoordinate(coordinate);
     setChooserOpen(true);
+  }
+
+  function updateDraftLocation(next: Coordinate, animate = false) {
+    setDraftCoordinate(next);
+    setDraftMoving(false);
+
+    if (animate) {
+      chooserMapRef.current?.animateToRegion(
+        {
+          latitude: next.latitude,
+          longitude: next.longitude,
+          latitudeDelta: 0.006,
+          longitudeDelta: 0.006,
+        },
+        360,
+      );
+    }
+  }
+
+  function updateDraftFromRegion(region: Region) {
+    setDraftMoving(false);
+    setDraftCoordinate({
+      latitude: region.latitude,
+      longitude: region.longitude,
+    });
+  }
+
+  async function useCurrentLocationInChooser() {
+    setChooserLocating(true);
+    try {
+      const current = await requestLocation();
+
+      if (current) {
+        updateDraftLocation(current, true);
+      }
+    } finally {
+      setChooserLocating(false);
+    }
   }
 
   function confirmChosenLocation() {
@@ -286,13 +340,21 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
       >
         <Text style={styles.prompt}>What did you discover today?</Text>
         <View style={styles.coordinateBox}>
-          <Text style={styles.coordinateLabel}>Cairn Location</Text>
-          <Text style={styles.coordinate}>
-            {formatCoordinates(coordinate)}
-          </Text>
+          <View style={styles.locationHeader}>
+            <View>
+              <Text style={styles.coordinateLabel}>Cairn Location</Text>
+              <Text style={styles.coordinate}>
+                {formatCoordinates(coordinate)}
+              </Text>
+            </View>
+            <View style={styles.locationBadge}>
+              <Feather name="map-pin" size={14} color={colors.moss} />
+              <Text style={styles.locationBadgeText}>Set</Text>
+            </View>
+          </View>
           <View style={styles.locationActions}>
             <Button
-              label={locating ? 'Locating...' : 'Use Current Location'}
+              label={locating ? 'Locating...' : 'Use Current'}
               onPress={useDeviceLocation}
               disabled={locating}
               style={styles.locationAction}
@@ -312,79 +374,101 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
               <Text style={styles.help}>Finding your current location...</Text>
             </View>
           ) : null}
-          <View style={styles.pasteRow}>
-            <Field
-              label="Paste coordinates"
-              value={coordinateInput}
-              onBlur={applyCombinedCoordinate}
-              onChangeText={(value) => {
-                setCoordinateInput(value);
-                setCoordinateInputDirty(true);
-                clearCoordinateFeedback();
-              }}
-              placeholder="47.90081, -119.17627"
-              autoCapitalize="none"
-              autoCorrect={false}
-              containerStyle={styles.pasteField}
-              accessibilityLabel="Paste coordinates"
+          <Pressable
+            accessibilityRole="button"
+            accessibilityState={{ expanded: manualCoordinatesOpen }}
+            accessibilityLabel="Enter coordinates manually"
+            onPress={() => setManualCoordinatesOpen((open) => !open)}
+            style={({ pressed }) => [styles.manualToggle, pressed && styles.pressed]}
+          >
+            <View style={styles.manualToggleText}>
+              <Text style={styles.manualToggleTitle}>Enter coordinates manually</Text>
+              <Text style={styles.manualToggleHelp}>Paste from Google Maps or type latitude and longitude.</Text>
+            </View>
+            <Feather
+              name={manualCoordinatesOpen ? 'chevron-up' : 'chevron-down'}
+              size={20}
+              color={colors.muted}
             />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Paste coordinates from clipboard"
-              onPress={pasteCoordinates}
-              style={({ pressed }) => [styles.pasteButton, pressed && styles.pressed]}
-            >
-              <Text style={styles.pasteButtonText}>Paste</Text>
-            </Pressable>
-          </View>
-          <Text style={styles.help}>Paste coordinates from Google Maps or another map app.</Text>
-          <View style={styles.coordinateFields}>
-            <Field
-              label="Latitude"
-              value={latitudeText}
-              onBlur={applyManualCoordinate}
-              onChangeText={(value) => {
-                setLatitudeText(value);
-                setCoordinateInputDirty(false);
-                clearCoordinateFeedback();
-              }}
-              placeholder="47.62050"
-              keyboardType="numbers-and-punctuation"
-              inputMode="decimal"
-              autoCapitalize="none"
-              autoCorrect={false}
-              containerStyle={styles.coordinateField}
-              style={styles.coordinateInput}
-            />
-            <Field
-              label="Longitude"
-              value={longitudeText}
-              onBlur={applyManualCoordinate}
-              onChangeText={(value) => {
-                setLongitudeText(value);
-                setCoordinateInputDirty(false);
-                clearCoordinateFeedback();
-              }}
-              placeholder="-122.34930"
-              keyboardType="numbers-and-punctuation"
-              inputMode="decimal"
-              autoCapitalize="none"
-              autoCorrect={false}
-              containerStyle={styles.coordinateField}
-              style={styles.coordinateInput}
-            />
-          </View>
-          {coordinateError ? <Text style={styles.errorText}>{coordinateError}</Text> : null}
-          {swapSuggestion ? (
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Swap latitude and longitude"
-              onPress={() => updateCoordinate(swapSuggestion)}
-              style={({ pressed }) => [styles.swapButton, pressed && styles.pressed]}
-            >
-              <Feather name="repeat" size={16} color={colors.moss} />
-              <Text style={styles.swapText}>Swap them</Text>
-            </Pressable>
+          </Pressable>
+          {manualCoordinatesOpen ? (
+            <View style={styles.manualPanel}>
+              <View style={styles.pasteRow}>
+                <Field
+                  label="Paste coordinates"
+                  value={coordinateInput}
+                  onBlur={applyCombinedCoordinate}
+                  onChangeText={(value) => {
+                    setCoordinateInput(value);
+                    setCoordinateInputDirty(true);
+                    clearCoordinateFeedback();
+                  }}
+                  placeholder="47.90081, -119.17627"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  containerStyle={styles.pasteField}
+                  accessibilityLabel="Paste coordinates"
+                />
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Paste coordinates from clipboard"
+                  onPress={pasteCoordinates}
+                  style={({ pressed }) => [styles.pasteButton, pressed && styles.pressed]}
+                >
+                  <Text style={styles.pasteButtonText}>Paste</Text>
+                </Pressable>
+              </View>
+              <View style={styles.coordinateFields}>
+                <Field
+                  label="Latitude"
+                  value={latitudeText}
+                  onBlur={applyManualCoordinate}
+                  onChangeText={(value) => {
+                    setLatitudeText(value);
+                    setCoordinateInputDirty(false);
+                    clearCoordinateFeedback();
+                  }}
+                  placeholder="47.62050"
+                  keyboardType="numbers-and-punctuation"
+                  inputMode="decimal"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  containerStyle={styles.coordinateField}
+                  style={styles.coordinateInput}
+                />
+                <Field
+                  label="Longitude"
+                  value={longitudeText}
+                  onBlur={applyManualCoordinate}
+                  onChangeText={(value) => {
+                    setLongitudeText(value);
+                    setCoordinateInputDirty(false);
+                    clearCoordinateFeedback();
+                  }}
+                  placeholder="-122.34930"
+                  keyboardType="numbers-and-punctuation"
+                  inputMode="decimal"
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  containerStyle={styles.coordinateField}
+                  style={styles.coordinateInput}
+                />
+              </View>
+              {coordinateError ? <Text style={styles.errorText}>{coordinateError}</Text> : null}
+              {swapSuggestion ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Swap latitude and longitude"
+                  onPress={() => updateCoordinate(swapSuggestion)}
+                  style={({ pressed }) => [styles.swapButton, pressed && styles.pressed]}
+                >
+                  <Feather name="repeat" size={16} color={colors.moss} />
+                  <Text style={styles.swapText}>Swap them</Text>
+                </Pressable>
+              ) : null}
+            </View>
+          ) : coordinateError ? (
+            <Text style={styles.errorText}>{coordinateError}</Text>
           ) : null}
           <View style={styles.mapWrap}>
             <MapView
@@ -509,7 +593,7 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
       </ScrollView>
       <Modal visible={chooserOpen} animationType="slide" onRequestClose={() => setChooserOpen(false)}>
         <View style={styles.chooserScreen}>
-          <View style={styles.chooserHeader}>
+          <View style={[styles.chooserHeader, { paddingTop: insets.top + spacing.xs }]}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Cancel choosing location"
@@ -518,34 +602,68 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
             >
               <Text style={styles.chooserHeaderText}>Cancel</Text>
             </Pressable>
-            <Text style={styles.chooserTitle}>Choose Location</Text>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Confirm chosen location"
-              onPress={confirmChosenLocation}
-              style={({ pressed }) => [styles.chooserHeaderButton, pressed && styles.pressed]}
-            >
-              <Text style={styles.chooserHeaderText}>Use</Text>
-            </Pressable>
+            <View style={styles.chooserTitleLockup}>
+              <MiniCairnGlyph />
+              <Text style={styles.chooserTitle}>Choose Location</Text>
+            </View>
+            <View style={styles.chooserHeaderButton} />
           </View>
-          <MapView
-            provider={PROVIDER_GOOGLE}
-            style={styles.chooserMap}
-            initialRegion={draftRegion}
-            onPress={(event) => setDraftCoordinate(event.nativeEvent.coordinate)}
-          >
-            <Marker
-              anchor={{ x: 0.5, y: 0.5 }}
-              coordinate={draftCoordinate}
-              draggable
-              image={CAIRN_MARKER_IMAGE}
-              onDragEnd={(event) => setDraftCoordinate(event.nativeEvent.coordinate)}
+          <View style={styles.chooserMapFrame}>
+            <MapView
+              ref={chooserMapRef}
+              provider={PROVIDER_GOOGLE}
+              style={StyleSheet.absoluteFill}
+              initialRegion={draftRegion}
+              showsMyLocationButton={false}
+              toolbarEnabled={false}
+              onPanDrag={() => setDraftMoving(true)}
+              onPress={(event) => updateDraftLocation(event.nativeEvent.coordinate, true)}
+              onRegionChangeComplete={updateDraftFromRegion}
             />
-          </MapView>
-          <View style={styles.chooserFooter}>
-            <Text style={styles.coordinateLabel}>Selected location</Text>
-            <Text style={styles.coordinate}>{formatCoordinates(draftCoordinate)}</Text>
-            <Text style={styles.help}>Tap the map or drag the marker to adjust this Cairn.</Text>
+            <View pointerEvents="box-none" style={styles.chooserMapOverlay}>
+              <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Use current location on map"
+              disabled={chooserLocating}
+              onPress={useCurrentLocationInChooser}
+              style={({ pressed }) => [styles.chooserLocateButton, pressed && styles.pressed]}
+            >
+              {chooserLocating ? (
+                <ActivityIndicator color={colors.moss} />
+              ) : (
+                <Feather name="navigation" size={18} color={colors.ink} />
+              )}
+            </Pressable>
+              <View style={styles.chooserHint}>
+                <MiniCairnGlyph />
+                <Text style={styles.chooserHintText}>Move the map to place your Cairn</Text>
+              </View>
+            </View>
+            <View pointerEvents="none" style={styles.chooserCenterMarker}>
+              <Image
+                source={CAIRN_MARKER_IMAGE}
+                style={[styles.chooserCenterMarkerImage, draftMoving && styles.chooserCenterMarkerMoving]}
+              />
+              <View style={styles.chooserCenterShadow} />
+            </View>
+          </View>
+          <View style={[styles.chooserFooter, { paddingBottom: Math.max(insets.bottom + spacing.sm, spacing.lg) }]}>
+            <View style={styles.chooserHandle} />
+            <View style={styles.chooserFooterHeader}>
+              <View>
+                <Text style={styles.chooserFooterTitle}>Drop your Cairn here</Text>
+                <Text style={styles.chooserCoordinate}>{formatCoordinates(draftCoordinate)}</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Confirm chosen location"
+                onPress={confirmChosenLocation}
+                style={({ pressed }) => [styles.chooserUsePill, pressed && styles.pressed]}
+              >
+                <Text style={styles.chooserUsePillText}>Use</Text>
+              </Pressable>
+            </View>
+            <Text style={styles.chooserFooterHelp}>Fine tune the location by moving the map beneath the Cairn marker, or tap a spot to jump there.</Text>
           </View>
         </View>
       </Modal>
@@ -581,7 +699,13 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.paper,
     padding: spacing.md,
-    gap: spacing.xs,
+    gap: spacing.sm,
+  },
+  locationHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
   },
   coordinateLabel: {
     color: colors.ink,
@@ -589,6 +713,23 @@ const styles = StyleSheet.create({
   },
   coordinate: {
     color: colors.muted,
+    marginTop: 4,
+  },
+  locationBadge: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(203, 216, 198, 0.48)',
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.14)',
+    paddingHorizontal: spacing.sm,
+  },
+  locationBadgeText: {
+    color: colors.moss,
+    fontSize: type.small,
+    fontWeight: '900',
   },
   locationActions: {
     flexDirection: 'row',
@@ -604,6 +745,41 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
+  },
+  manualToggle: {
+    minHeight: 56,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.14)',
+    backgroundColor: colors.cream,
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  manualToggleText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  manualToggleTitle: {
+    color: colors.ink,
+    fontWeight: '900',
+  },
+  manualToggleHelp: {
+    color: colors.muted,
+    fontSize: type.small,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  manualPanel: {
+    gap: spacing.sm,
+    borderRadius: 8,
+    backgroundColor: 'rgba(250, 248, 243, 0.72)',
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
+    padding: spacing.sm,
   },
   pasteRow: {
     flexDirection: 'row',
@@ -715,20 +891,48 @@ const styles = StyleSheet.create({
     color: colors.muted,
     flexShrink: 1,
   },
+  miniCairn: {
+    width: 24,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  miniStone0: {
+    width: 7,
+    height: 5,
+    borderRadius: 6,
+    backgroundColor: colors.ink,
+    marginBottom: 2,
+    transform: [{ rotate: '-7deg' }, { translateX: 1 }],
+  },
+  miniStone1: {
+    width: 15,
+    height: 5,
+    borderRadius: 8,
+    backgroundColor: colors.ink,
+    marginBottom: 2,
+    transform: [{ rotate: '5deg' }, { translateX: -1 }],
+  },
+  miniStone2: {
+    width: 23,
+    height: 6,
+    borderRadius: 10,
+    backgroundColor: colors.ink,
+    transform: [{ rotate: '-2deg' }],
+  },
   chooserScreen: {
     flex: 1,
     backgroundColor: colors.cream,
   },
   chooserHeader: {
-    minHeight: 72,
+    minHeight: 82,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: spacing.md,
-    paddingTop: spacing.md,
-    backgroundColor: colors.paper,
+    backgroundColor: colors.sage,
     borderBottomWidth: 1,
-    borderBottomColor: colors.line,
+    borderBottomColor: 'rgba(49, 86, 66, 0.18)',
   },
   chooserHeaderButton: {
     minWidth: 64,
@@ -737,20 +941,142 @@ const styles = StyleSheet.create({
   },
   chooserHeaderText: {
     color: colors.moss,
-    fontWeight: '800',
+    fontWeight: '900',
+  },
+  chooserTitleLockup: {
+    position: 'absolute',
+    left: 104,
+    right: 104,
+    bottom: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
   },
   chooserTitle: {
     color: colors.ink,
     fontWeight: '900',
+    fontSize: type.body,
   },
-  chooserMap: {
+  chooserMapFrame: {
     flex: 1,
   },
-  chooserFooter: {
-    gap: spacing.xs,
+  chooserMapOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: 'space-between',
     padding: spacing.md,
+    zIndex: 3,
+    elevation: 3,
+  },
+  chooserLocateButton: {
+    width: 48,
+    height: 48,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    alignSelf: 'flex-end',
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.16)',
+    zIndex: 4,
+    elevation: 3,
+  },
+  chooserHint: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'center',
+    gap: spacing.xs,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.14)',
+    backgroundColor: 'rgba(250, 248, 243, 0.92)',
+    paddingHorizontal: spacing.sm,
+  },
+  chooserHintText: {
+    color: colors.ink,
+    fontSize: type.small,
+    fontWeight: '800',
+  },
+  chooserCenterMarker: {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: 54,
+    height: 64,
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    marginLeft: -27,
+    marginTop: -36,
+    zIndex: 2,
+  },
+  chooserCenterMarkerImage: {
+    width: 46,
+    height: 46,
+    resizeMode: 'contain',
+  },
+  chooserCenterMarkerMoving: {
+    transform: [{ translateY: -6 }, { scale: 1.04 }],
+  },
+  chooserCenterShadow: {
+    width: 18,
+    height: 5,
+    borderRadius: 9,
+    marginTop: 3,
+    backgroundColor: 'rgba(25, 53, 38, 0.22)',
+  },
+  chooserFooter: {
+    gap: spacing.sm,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.xs,
     backgroundColor: colors.paper,
     borderTopWidth: 1,
-    borderTopColor: colors.line,
+    borderLeftWidth: 1,
+    borderRightWidth: 1,
+    borderTopLeftRadius: 8,
+    borderTopRightRadius: 8,
+    borderColor: 'rgba(49, 86, 66, 0.16)',
+  },
+  chooserHandle: {
+    width: 44,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    backgroundColor: colors.line,
+    marginBottom: spacing.xs,
+  },
+  chooserFooterHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  chooserFooterTitle: {
+    color: colors.ink,
+    fontSize: type.body,
+    fontWeight: '900',
+  },
+  chooserCoordinate: {
+    color: colors.muted,
+    fontSize: type.small,
+    marginTop: 3,
+  },
+  chooserUsePill: {
+    minWidth: 76,
+    minHeight: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: colors.moss,
+    paddingHorizontal: spacing.md,
+  },
+  chooserUsePillText: {
+    color: colors.white,
+    fontWeight: '900',
+  },
+  chooserFooterHelp: {
+    color: colors.muted,
+    fontSize: type.small,
+    lineHeight: 19,
   },
 });

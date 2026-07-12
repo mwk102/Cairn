@@ -1,15 +1,19 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Animated,
+  Easing,
   FlatList,
   Image,
+  Linking,
   Modal,
   Pressable,
   StyleSheet,
   Text,
+  TextInput,
   View,
 } from 'react-native';
-import MapView, { Marker, PROVIDER_GOOGLE } from 'react-native-maps';
+import MapView, { Circle, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
@@ -29,6 +33,8 @@ const FALLBACK_REGION = {
   longitudeDelta: 0.18,
 };
 const CAIRN_MARKER_IMAGE = require('../assets/markers/cairn-badge.png');
+const CAIRN_MARKER_FAVORITE_IMAGE = require('../assets/markers/cairn-badge-favorite.png');
+const CAIRN_MARKER_SELECTED_IMAGE = require('../assets/markers/cairn-badge-selected.png');
 
 function CairnBrandMark() {
   return (
@@ -61,16 +67,38 @@ function BuildCairnGlyph() {
 
 export default function MapHome() {
   const mapRef = useRef<MapView>(null);
+  const searchInputRef = useRef<TextInput>(null);
+  const searchFocusTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const selectionMotion = useRef(new Animated.Value(0)).current;
+  const buildButtonScale = useRef(new Animated.Value(1)).current;
+  const buildRipple = useRef(new Animated.Value(0)).current;
+  const buildNavigating = useRef(false);
+  const menuSlide = useRef(new Animated.Value(0)).current;
+  const menuHandleGlow = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuFilter, setMenuFilter] = useState<'all' | 'favorites'>('all');
+  const [searchQuery, setSearchQuery] = useState('');
   const [selectedCairnId, setSelectedCairnId] = useState<string | null>(null);
+  const [rippleRadius, setRippleRadius] = useState(0);
+  const [rippleOpacity, setRippleOpacity] = useState(0);
   const { cairns, loading, error, reload } = useCairns();
   const { coordinate, permissionDenied, requestLocation } = useCurrentLocation();
   const selectedCairn = cairns.find((cairn) => cairn.id === selectedCairnId);
-  const visibleMenuCairns = menuFilter === 'favorites'
+  const trimmedSearchQuery = searchQuery.trim().toLowerCase();
+  const visibleMenuCairns = (menuFilter === 'favorites'
     ? cairns.filter((cairn) => cairn.isFavorite)
-    : cairns;
+    : cairns)
+    .filter((cairn) => {
+      if (!trimmedSearchQuery) return true;
+
+      return [
+        cairn.name,
+        cairn.placeType,
+        cairn.story,
+        cairn.notes,
+      ].some((value) => value.toLowerCase().includes(trimmedSearchQuery));
+    });
 
   useEffect(() => {
     requestLocation();
@@ -99,9 +127,96 @@ export default function MapHome() {
     }
   }, [cairns, selectedCairnId]);
 
+  useEffect(() => {
+    if (!menuOpen) {
+      menuSlide.setValue(0);
+      menuHandleGlow.setValue(0);
+      return;
+    }
+
+    Animated.sequence([
+      Animated.spring(menuSlide, {
+        toValue: 1,
+        speed: 18,
+        bounciness: 6,
+        useNativeDriver: true,
+      }),
+      Animated.sequence([
+        Animated.timing(menuHandleGlow, {
+          toValue: 1,
+          duration: 120,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: false,
+        }),
+        Animated.timing(menuHandleGlow, {
+          toValue: 0,
+          duration: 260,
+          easing: Easing.inOut(Easing.quad),
+          useNativeDriver: false,
+        }),
+      ]),
+    ]).start();
+  }, [menuHandleGlow, menuOpen, menuSlide]);
+
+  useEffect(() => () => {
+    buildNavigating.current = false;
+    if (searchFocusTimeout.current) {
+      clearTimeout(searchFocusTimeout.current);
+    }
+  }, []);
+
+  useEffect(() => {
+    const listener = selectionMotion.addListener(({ value }) => {
+      setRippleRadius(35 + value * 210);
+      setRippleOpacity(Math.max(0, 0.22 * (1 - value)));
+    });
+
+    return () => selectionMotion.removeListener(listener);
+  }, [selectionMotion]);
+
+  useEffect(() => {
+    if (!selectedCairnId) {
+      setRippleOpacity(0);
+      return;
+    }
+
+    selectionMotion.setValue(0);
+    Animated.timing(selectionMotion, {
+      toValue: 1,
+      duration: 520,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }, [selectedCairnId, selectionMotion]);
+
   function openCairn(cairn: Cairn) {
-    setMenuOpen(false);
+    closePlacesMenu();
     router.push(`/cairn/${cairn.id}`);
+  }
+
+  function openPlacesMenu(focusSearch = false) {
+    if (searchFocusTimeout.current) {
+      clearTimeout(searchFocusTimeout.current);
+    }
+
+    setMenuOpen(true);
+
+    if (focusSearch) {
+      searchFocusTimeout.current = setTimeout(() => {
+        searchInputRef.current?.focus();
+        searchFocusTimeout.current = null;
+      }, 430);
+    }
+  }
+
+  function closePlacesMenu() {
+    if (searchFocusTimeout.current) {
+      clearTimeout(searchFocusTimeout.current);
+      searchFocusTimeout.current = null;
+    }
+
+    searchInputRef.current?.blur();
+    setMenuOpen(false);
   }
 
   function heroPhotoFor(cairn: Cairn) {
@@ -110,6 +225,12 @@ export default function MapHome() {
 
   function previewMemoryFor(cairn: Cairn) {
     return (cairn.story || cairn.notes).trim();
+  }
+
+  function markerImageFor(cairn: Cairn) {
+    if (cairn.id === selectedCairnId) return CAIRN_MARKER_SELECTED_IMAGE;
+    if (cairn.isFavorite) return CAIRN_MARKER_FAVORITE_IMAGE;
+    return CAIRN_MARKER_IMAGE;
   }
 
   async function recenterMap() {
@@ -127,6 +248,57 @@ export default function MapHome() {
     );
   }
 
+  function googleMapsPlaceUrl(cairn: Cairn) {
+    return `https://www.google.com/maps/search/?api=1&query=${cairn.latitude},${cairn.longitude}`;
+  }
+
+  function googleMapsDirectionsUrl(cairn: Cairn) {
+    return `https://www.google.com/maps/dir/?api=1&destination=${cairn.latitude},${cairn.longitude}`;
+  }
+
+  async function openExternalMap(cairn: Cairn) {
+    await Linking.openURL(googleMapsPlaceUrl(cairn));
+  }
+
+  async function navigateToCairn(cairn: Cairn) {
+    await Linking.openURL(googleMapsDirectionsUrl(cairn));
+  }
+
+  function startBuildCairn() {
+    if (buildNavigating.current) return;
+    buildNavigating.current = true;
+    buildRipple.setValue(0);
+    buildButtonScale.setValue(1);
+
+    Animated.parallel([
+      Animated.sequence([
+        Animated.timing(buildButtonScale, {
+          toValue: 0.88,
+          duration: 70,
+          easing: Easing.out(Easing.quad),
+          useNativeDriver: true,
+        }),
+        Animated.spring(buildButtonScale, {
+          toValue: 1,
+          speed: 22,
+          bounciness: 8,
+          useNativeDriver: true,
+        }),
+      ]),
+      Animated.timing(buildRipple, {
+        toValue: 1,
+        duration: 260,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: true,
+      }),
+    ]).start();
+
+    window.setTimeout(() => {
+      router.push('/cairn/build');
+      buildNavigating.current = false;
+    }, 130);
+  }
+
   return (
     <View style={styles.screen}>
       <MapView
@@ -134,6 +306,8 @@ export default function MapHome() {
         provider={PROVIDER_GOOGLE}
         style={StyleSheet.absoluteFill}
         showsUserLocation={!!coordinate}
+        showsMyLocationButton={false}
+        toolbarEnabled={false}
         onPress={() => setSelectedCairnId(null)}
         initialRegion={{
           ...FALLBACK_REGION,
@@ -145,13 +319,22 @@ export default function MapHome() {
             key={cairn.id}
             anchor={{ x: 0.5, y: 0.5 }}
             coordinate={{ latitude: cairn.latitude, longitude: cairn.longitude }}
-            image={CAIRN_MARKER_IMAGE}
+            image={markerImageFor(cairn)}
             onPress={(event) => {
               event.stopPropagation();
               setSelectedCairnId(cairn.id);
             }}
           />
         ))}
+        {selectedCairn && rippleOpacity > 0 ? (
+          <Circle
+            center={{ latitude: selectedCairn.latitude, longitude: selectedCairn.longitude }}
+            radius={rippleRadius}
+            fillColor={`rgba(203, 216, 198, ${rippleOpacity})`}
+            strokeColor={`rgba(49, 86, 66, ${rippleOpacity * 0.75})`}
+            strokeWidth={1}
+          />
+        ) : null}
       </MapView>
       <View pointerEvents="box-none" style={styles.overlay}>
         <View style={[styles.header, { paddingTop: insets.top }]}>
@@ -159,7 +342,7 @@ export default function MapHome() {
             accessibilityRole="button"
             accessibilityLabel="Open Cairn menu"
             disabled={loading}
-            onPress={() => setMenuOpen(true)}
+            onPress={() => openPlacesMenu()}
             style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
           >
             <Feather name="menu" size={20} color={colors.ink} />
@@ -172,7 +355,7 @@ export default function MapHome() {
             accessibilityRole="button"
             accessibilityLabel="Open Cairn search"
             disabled={loading}
-            onPress={() => setMenuOpen(true)}
+            onPress={() => openPlacesMenu(true)}
             style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
           >
             <Feather name="search" size={20} color={colors.ink} />
@@ -203,69 +386,126 @@ export default function MapHome() {
             <Button label="Build Cairn" onPress={() => router.push('/cairn/build')} style={styles.emptyButton} />
           </View>
         ) : selectedCairn ? (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={`Open ${selectedCairn.name}`}
-            onPress={() => openCairn(selectedCairn)}
-              style={({ pressed }) => [styles.previewCard, pressed && styles.pressed]}
+          <Animated.View
+            style={[
+              styles.previewSpring,
+              {
+                opacity: selectionMotion,
+                transform: [
+                  {
+                    translateY: selectionMotion.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [34, 0],
+                    }),
+                  },
+                  {
+                    scale: selectionMotion.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [0.98, 1],
+                    }),
+                  },
+                ],
+              },
+            ]}
           >
-            <View style={styles.menuHandle} />
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel="Clear selected Cairn"
-              onPress={() => setSelectedCairnId(null)}
-              style={styles.previewClose}
+              accessibilityLabel={`Open ${selectedCairn.name}`}
+              onPress={() => openCairn(selectedCairn)}
+              style={({ pressed }) => [styles.previewCard, pressed && styles.pressed]}
             >
-              <Feather name="x" size={18} color={colors.muted} />
-            </Pressable>
-            <View style={styles.previewContent}>
-              <View style={styles.previewPhotoWrap}>
-                {heroPhotoFor(selectedCairn)?.localUri ? (
-                  <Image source={{ uri: heroPhotoFor(selectedCairn)?.localUri }} style={styles.previewPhoto} />
-                ) : (
-                  <View style={styles.previewPhotoPlaceholder}>
-                    <CairnMarker />
-                  </View>
-                )}
-                {selectedCairn.isFavorite ? (
-                  <View style={styles.previewFavoriteBadge}>
-                    <MaterialIcons name="star" size={14} color={colors.white} />
-                  </View>
-                ) : null}
-              </View>
-              <View style={styles.previewText}>
-                <Text numberOfLines={1} style={styles.previewName}>
-                  {selectedCairn.name}
-                </Text>
-                <View style={styles.previewMetaRow}>
-                  <View style={styles.previewTypeChip}>
-                    <Text style={styles.previewTypeText}>
-                      {PLACE_TYPE_ICONS[selectedCairn.placeType]} {selectedCairn.placeType}
+              <View style={styles.menuHandle} />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear selected Cairn"
+                onPress={() => setSelectedCairnId(null)}
+                style={styles.previewClose}
+              >
+                <Feather name="x" size={18} color={colors.muted} />
+              </Pressable>
+              <View style={styles.previewContent}>
+                <View style={styles.previewPhotoWrap}>
+                  {heroPhotoFor(selectedCairn)?.localUri ? (
+                    <Image source={{ uri: heroPhotoFor(selectedCairn)?.localUri }} style={styles.previewPhoto} />
+                  ) : (
+                    <View style={styles.previewPhotoPlaceholder}>
+                      <CairnMarker />
+                    </View>
+                  )}
+                  {selectedCairn.isFavorite ? (
+                    <View style={styles.previewFavoriteBadge}>
+                      <MaterialIcons name="star" size={14} color={colors.white} />
+                    </View>
+                  ) : null}
+                </View>
+                <View style={styles.previewText}>
+                  <Text numberOfLines={1} style={styles.previewName}>
+                    {selectedCairn.name}
+                  </Text>
+                  <View style={styles.previewMetaRow}>
+                    <View style={styles.previewTypeChip}>
+                      <Text style={styles.previewTypeText}>
+                        {PLACE_TYPE_ICONS[selectedCairn.placeType]} {selectedCairn.placeType}
+                      </Text>
+                    </View>
+                    <Text numberOfLines={1} style={styles.previewVisited}>
+                      Visited {formatDate(selectedCairn.lastVisitedAt)}
                     </Text>
                   </View>
-                  <Text numberOfLines={1} style={styles.previewVisited}>
-                    Visited {formatDate(selectedCairn.lastVisitedAt)}
-                  </Text>
+                </View>
+                <View style={styles.previewActionColumn}>
+                  <Feather name="chevron-right" size={18} color={colors.muted} />
                 </View>
               </View>
-              <View style={styles.previewActionColumn}>
-                <Feather name="chevron-right" size={18} color={colors.muted} />
+              {previewMemoryFor(selectedCairn) ? (
+                <View style={styles.previewMemoryBand}>
+                  <Text numberOfLines={2} style={styles.previewMemory}>
+                    {previewMemoryFor(selectedCairn)}
+                  </Text>
+                </View>
+                ) : (
+                <View style={styles.previewMemoryBand}>
+                  <Text numberOfLines={1} style={styles.previewMemoryMuted}>
+                    Add a story to remember why this place mattered.
+                  </Text>
+                </View>
+              )}
+              <View style={styles.previewUtilityRow}>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Navigate to ${selectedCairn.name}`}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    navigateToCairn(selectedCairn);
+                  }}
+                  style={({ pressed }) => [styles.previewUtilityButton, pressed && styles.pressed]}
+                >
+                  <View style={styles.previewUtilityGlyph}>
+                    <View style={styles.utilityStoneSmall} />
+                    <View style={styles.utilityStoneLarge} />
+                  </View>
+                  <Text style={styles.previewUtilityText}>Navigate</Text>
+                  <Feather name="navigation" size={14} color={colors.moss} />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Open ${selectedCairn.name} in Google Maps`}
+                  onPress={(event) => {
+                    event.stopPropagation();
+                    openExternalMap(selectedCairn);
+                  }}
+                  style={({ pressed }) => [styles.previewUtilityButton, pressed && styles.pressed]}
+                >
+                  <View style={styles.previewUtilityGlyph}>
+                    <View style={styles.utilityStoneSmall} />
+                    <View style={styles.utilityStoneLarge} />
+                  </View>
+                  <Text style={styles.previewUtilityText}>Open Map</Text>
+                  <Feather name="external-link" size={14} color={colors.moss} />
+                </Pressable>
               </View>
-            </View>
-            {previewMemoryFor(selectedCairn) ? (
-              <View style={styles.previewMemoryBand}>
-                <Text numberOfLines={2} style={styles.previewMemory}>
-                  {previewMemoryFor(selectedCairn)}
-                </Text>
-              </View>
-            ) : (
-              <View style={styles.previewMemoryBand}>
-                <Text numberOfLines={1} style={styles.previewMemoryMuted}>
-                  Add a story to remember why this place mattered.
-                </Text>
-              </View>
-            )}
-          </Pressable>
+            </Pressable>
+          </Animated.View>
         ) : permissionDenied ? (
           <View style={styles.notice}>
             <Text style={styles.noticeText}>Location is off. Your Cairns still work.</Text>
@@ -275,33 +515,115 @@ export default function MapHome() {
       <Pressable
         accessibilityRole="button"
         accessibilityLabel="Build Cairn"
-        onPress={() => router.push('/cairn/build')}
+        onPress={startBuildCairn}
         style={[styles.fab, selectedCairn && styles.fabRaised]}
       >
-        <BuildCairnGlyph />
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            styles.fabRipple,
+            {
+              opacity: buildRipple.interpolate({
+                inputRange: [0, 0.45, 1],
+                outputRange: [0, 0.26, 0],
+              }),
+              transform: [
+                {
+                  scale: buildRipple.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [0.8, 2.25],
+                  }),
+                },
+              ],
+            },
+          ]}
+        />
+        <Animated.View style={{ transform: [{ scale: buildButtonScale }] }}>
+          <BuildCairnGlyph />
+        </Animated.View>
       </Pressable>
       <Modal
-        animationType="slide"
+        animationType="none"
         transparent
         visible={menuOpen}
-        onRequestClose={() => setMenuOpen(false)}
+        onRequestClose={closePlacesMenu}
       >
-        <Pressable style={styles.modalBackdrop} onPress={() => setMenuOpen(false)} />
-        <View style={[styles.menuSheet, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
-          <View style={styles.menuHandle} />
+        <Pressable style={styles.modalBackdrop} onPress={closePlacesMenu} />
+        <Animated.View
+          style={[
+            styles.menuSheet,
+            {
+              paddingBottom: Math.max(insets.bottom, spacing.sm),
+              opacity: menuSlide,
+              transform: [
+                {
+                  translateY: menuSlide.interpolate({
+                    inputRange: [0, 1],
+                    outputRange: [420, 0],
+                  }),
+                },
+              ],
+            },
+          ]}
+        >
+          <Animated.View
+            style={[
+              styles.menuHandle,
+              {
+                backgroundColor: menuHandleGlow.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [colors.line, colors.sage],
+                }),
+                transform: [
+                  {
+                    scaleX: menuHandleGlow.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [1, 1.28],
+                    }),
+                  },
+                ],
+              },
+            ]}
+          />
           <View style={styles.menuHeader}>
-            <View style={styles.menuBrand}>
-              <CairnBrandMark />
-              <Text style={styles.menuTitle}>Cairn</Text>
+            <View style={styles.menuTitleBlock}>
+              <Text style={styles.menuTitle}>Places</Text>
+              <Text style={styles.menuSubtitle}>
+                {cairns.length} {cairns.length === 1 ? 'place' : 'places'} saved
+              </Text>
             </View>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Close Cairn menu"
-              onPress={() => setMenuOpen(false)}
+              onPress={closePlacesMenu}
               style={styles.closeButton}
             >
               <Feather name="x" size={22} color={colors.ink} />
             </Pressable>
+          </View>
+          <View style={styles.searchBox}>
+            <Feather name="search" size={17} color={colors.muted} />
+            <TextInput
+              ref={searchInputRef}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              placeholder="Search places"
+              placeholderTextColor={colors.muted}
+              returnKeyType="search"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.searchInput}
+            />
+            {searchQuery ? (
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Clear search"
+                onPress={() => setSearchQuery('')}
+                style={styles.searchClear}
+              >
+                <Feather name="x" size={16} color={colors.muted} />
+              </Pressable>
+            ) : null}
           </View>
           <View style={styles.filterRow}>
             <Pressable
@@ -328,8 +650,14 @@ export default function MapHome() {
             </View>
           ) : visibleMenuCairns.length === 0 ? (
             <View style={styles.menuEmpty}>
-              <Text style={styles.panelTitle}>No favorites yet.</Text>
-              <Text style={styles.panelText}>Tap the star on a Cairn to remember it here.</Text>
+              <Text style={styles.panelTitle}>
+                {trimmedSearchQuery ? 'No matching places.' : 'No favorite places yet.'}
+              </Text>
+              <Text style={styles.panelText}>
+                {trimmedSearchQuery
+                  ? 'Try a place name, story, note, or place type.'
+                  : 'Star the places you always want close at hand.'}
+              </Text>
             </View>
           ) : (
             <FlatList
@@ -354,9 +682,19 @@ export default function MapHome() {
                     <Text numberOfLines={1} style={styles.cairnName}>
                       {item.name}
                     </Text>
-                    <Text numberOfLines={1} style={styles.cairnMeta}>
-                      {PLACE_TYPE_ICONS[item.placeType]} {item.placeType} - Last visited {formatDate(item.lastVisitedAt)}
-                    </Text>
+                    <View style={styles.cairnMetaRow}>
+                      <Text numberOfLines={1} style={styles.cairnType}>
+                        {PLACE_TYPE_ICONS[item.placeType]} {item.placeType}
+                      </Text>
+                      <Text numberOfLines={1} style={styles.cairnVisited}>
+                        Visited {formatDate(item.lastVisitedAt)}
+                      </Text>
+                    </View>
+                    {previewMemoryFor(item) ? (
+                      <Text numberOfLines={1} style={styles.cairnMemory}>
+                        {previewMemoryFor(item)}
+                      </Text>
+                    ) : null}
                   </View>
                   <MaterialIcons
                     name={item.isFavorite ? 'star' : 'star-border'}
@@ -367,7 +705,7 @@ export default function MapHome() {
               )}
             />
           )}
-        </View>
+        </Animated.View>
       </Modal>
     </View>
   );
@@ -496,7 +834,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
     marginHorizontal: -spacing.md,
-    marginBottom: -spacing.md,
+    marginBottom: spacing.lg,
   },
   panelTitle: {
     color: colors.ink,
@@ -514,7 +852,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderRadius: 8,
     padding: spacing.sm,
-    marginBottom: spacing.lg,
+    marginBottom: spacing.xl,
   },
   noticeText: {
     color: colors.muted,
@@ -530,6 +868,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.moss,
     elevation: 5,
+  },
+  fabRipple: {
+    position: 'absolute',
+    width: 58,
+    height: 58,
+    borderRadius: 29,
+    backgroundColor: colors.sage,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.18)',
   },
   buildGlyph: {
     width: 40,
@@ -603,6 +950,9 @@ const styles = StyleSheet.create({
     minWidth: 180,
     marginTop: spacing.sm,
   },
+  previewSpring: {
+    marginBottom: spacing.xl,
+  },
   previewCard: {
     borderRadius: 8,
     backgroundColor: colors.paper,
@@ -611,7 +961,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: spacing.md,
     paddingTop: spacing.xs,
     paddingBottom: spacing.md,
-    marginBottom: spacing.sm,
   },
   previewClose: {
     position: 'absolute',
@@ -716,21 +1065,65 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     marginTop: spacing.sm,
   },
+  previewUtilityRow: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+    marginTop: spacing.sm,
+  },
+  previewUtilityButton: {
+    minHeight: 40,
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.xs,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.18)',
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.sm,
+  },
+  previewUtilityGlyph: {
+    width: 16,
+    height: 15,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  utilityStoneSmall: {
+    width: 7,
+    height: 4,
+    borderRadius: 6,
+    backgroundColor: colors.moss,
+    marginBottom: 2,
+    transform: [{ rotate: '-6deg' }],
+  },
+  utilityStoneLarge: {
+    width: 14,
+    height: 5,
+    borderRadius: 8,
+    backgroundColor: colors.pine,
+    transform: [{ rotate: '3deg' }],
+  },
+  previewUtilityText: {
+    color: colors.ink,
+    fontSize: type.small,
+    fontWeight: '900',
+  },
   modalBackdrop: {
     flex: 1,
-    backgroundColor: 'rgba(32, 40, 34, 0.28)',
+    backgroundColor: 'transparent',
   },
   menuSheet: {
     position: 'absolute',
     left: 0,
     right: 0,
     bottom: 0,
-    maxHeight: '72%',
+    maxHeight: '76%',
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
     backgroundColor: colors.paper,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: 'rgba(49, 86, 66, 0.16)',
     paddingHorizontal: spacing.md,
     paddingBottom: spacing.sm,
   },
@@ -743,33 +1136,62 @@ const styles = StyleSheet.create({
     marginTop: spacing.xs,
   },
   menuHeader: {
-    minHeight: 56,
+    minHeight: 66,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  menuBrand: {
+  menuTitleBlock: {
+    gap: 2,
+  },
+  searchBox: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.16)',
+    backgroundColor: colors.cream,
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  searchInput: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.ink,
+    fontSize: type.body,
+    fontWeight: '700',
+    paddingVertical: 0,
+  },
+  searchClear: {
+    width: 30,
+    height: 30,
     alignItems: 'center',
     justifyContent: 'center',
   },
   filterRow: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.xs,
     marginBottom: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.cream,
+    padding: 3,
   },
   filterButton: {
     flex: 1,
     minHeight: 36,
-    borderRadius: 8,
+    borderRadius: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.cream,
-    borderWidth: 1,
-    borderColor: colors.line,
+    backgroundColor: 'transparent',
   },
   filterButtonSelected: {
-    backgroundColor: colors.ink,
-    borderColor: colors.ink,
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.18)',
   },
   filterLabel: {
     color: colors.muted,
@@ -777,12 +1199,17 @@ const styles = StyleSheet.create({
     fontSize: type.small,
   },
   filterLabelSelected: {
-    color: colors.white,
+    color: colors.ink,
   },
   menuTitle: {
     color: colors.ink,
     fontSize: type.heading,
     fontWeight: '900',
+  },
+  menuSubtitle: {
+    color: colors.muted,
+    fontSize: type.small,
+    fontWeight: '700',
   },
   closeButton: {
     width: 44,
@@ -800,11 +1227,11 @@ const styles = StyleSheet.create({
     gap: spacing.sm,
   },
   cairnRow: {
-    minHeight: 76,
+    minHeight: 88,
     borderRadius: 8,
     backgroundColor: colors.white,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: 'rgba(49, 86, 66, 0.14)',
     padding: spacing.sm,
     flexDirection: 'row',
     alignItems: 'center',
@@ -832,9 +1259,34 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     fontWeight: '800',
   },
-  cairnMeta: {
+  cairnMetaRow: {
+    minHeight: 28,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  cairnType: {
+    maxWidth: 132,
+    overflow: 'hidden',
+    color: colors.ink,
+    fontSize: type.small,
+    fontWeight: '800',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.16)',
+    backgroundColor: 'rgba(203, 216, 198, 0.46)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  cairnVisited: {
     color: colors.muted,
     fontSize: type.small,
-    marginTop: spacing.xs,
+    flexShrink: 1,
+  },
+  cairnMemory: {
+    color: colors.muted,
+    fontSize: type.small,
+    marginTop: 2,
   },
 });
