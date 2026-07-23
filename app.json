@@ -5,8 +5,9 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "scheme": "cairn",
+    "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -41,7 +42,25 @@
     ],
     "android": {
       "package": "com.cairn.placejournal",
-      "softwareKeyboardLayoutMode": "resize"
-    }
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#faf8f2"
+      },
+      "softwareKeyboardLayoutMode": "resize",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ]
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "6bbf9735-7e5b-4fa1-9cb4-e5234d226429"
+      }
+    },
+    "owner": "mwk102"
   }
 }

@@ -25,6 +25,7 @@ import { useCurrentLocation } from '@/hooks/useCurrentLocation';
 import { colors, spacing, type } from '@/theme';
 import { Cairn, PLACE_TYPE_ICONS } from '@/types/cairn';
 import { formatDate } from '@/utils/date';
+import { canUseNativeMap } from '@/utils/mapAvailability';
 
 const FALLBACK_REGION = {
   latitude: 47.6205,
@@ -84,6 +85,7 @@ export default function MapHome() {
   const [rippleOpacity, setRippleOpacity] = useState(0);
   const { cairns, loading, error, reload } = useCairns();
   const { coordinate, permissionDenied, requestLocation } = useCurrentLocation();
+  const mapAvailable = canUseNativeMap();
   const selectedCairn = cairns.find((cairn) => cairn.id === selectedCairnId);
   const trimmedSearchQuery = searchQuery.trim().toLowerCase();
   const visibleMenuCairns = (menuFilter === 'favorites'
@@ -302,41 +304,49 @@ export default function MapHome() {
 
   return (
     <View style={styles.screen}>
-      <MapView
-        ref={mapRef}
-        provider={PROVIDER_GOOGLE}
-        style={StyleSheet.absoluteFill}
-        showsUserLocation={!!coordinate}
-        showsMyLocationButton={false}
-        toolbarEnabled={false}
-        onPress={() => setSelectedCairnId(null)}
-        initialRegion={{
-          ...FALLBACK_REGION,
-          ...(coordinate ?? {}),
-        }}
-      >
-        {cairns.map((cairn) => (
-          <Marker
-            key={cairn.id}
-            anchor={{ x: 0.5, y: 0.5 }}
-            coordinate={{ latitude: cairn.latitude, longitude: cairn.longitude }}
-            image={markerImageFor(cairn)}
-            onPress={(event) => {
-              event.stopPropagation();
-              setSelectedCairnId(cairn.id);
-            }}
-          />
-        ))}
-        {selectedCairn && rippleOpacity > 0 ? (
-          <Circle
-            center={{ latitude: selectedCairn.latitude, longitude: selectedCairn.longitude }}
-            radius={rippleRadius}
-            fillColor={`rgba(203, 216, 198, ${rippleOpacity})`}
-            strokeColor={`rgba(49, 86, 66, ${rippleOpacity * 0.75})`}
-            strokeWidth={1}
-          />
-        ) : null}
-      </MapView>
+      {mapAvailable ? (
+        <MapView
+          ref={mapRef}
+          provider={PROVIDER_GOOGLE}
+          style={StyleSheet.absoluteFill}
+          showsUserLocation={!!coordinate}
+          showsMyLocationButton={false}
+          toolbarEnabled={false}
+          onPress={() => setSelectedCairnId(null)}
+          initialRegion={{
+            ...FALLBACK_REGION,
+            ...(coordinate ?? {}),
+          }}
+        >
+          {cairns.map((cairn) => (
+            <Marker
+              key={cairn.id}
+              anchor={{ x: 0.5, y: 0.5 }}
+              coordinate={{ latitude: cairn.latitude, longitude: cairn.longitude }}
+              image={markerImageFor(cairn)}
+              onPress={(event) => {
+                event.stopPropagation();
+                setSelectedCairnId(cairn.id);
+              }}
+            />
+          ))}
+          {selectedCairn && rippleOpacity > 0 ? (
+            <Circle
+              center={{ latitude: selectedCairn.latitude, longitude: selectedCairn.longitude }}
+              radius={rippleRadius}
+              fillColor={`rgba(203, 216, 198, ${rippleOpacity})`}
+              strokeColor={`rgba(49, 86, 66, ${rippleOpacity * 0.75})`}
+              strokeWidth={1}
+            />
+          ) : null}
+        </MapView>
+      ) : (
+        <View style={styles.mapUnavailable}>
+          <CairnBrandMark />
+          <Text style={styles.mapUnavailableTitle}>Map key needed</Text>
+          <Text style={styles.mapUnavailableText}>Add a Google Maps Android API key and rebuild Cairn to use the map in an installed APK.</Text>
+        </View>
+      )}
       <View pointerEvents="box-none" style={styles.overlay}>
         <View style={[styles.header, { paddingTop: insets.top }]}>
           <Pressable
@@ -727,6 +737,27 @@ export default function MapHome() {
 const styles = StyleSheet.create({
   screen: {
     flex: 1,
+  },
+  mapUnavailable: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.xl,
+    backgroundColor: colors.sage,
+  },
+  mapUnavailableTitle: {
+    marginTop: spacing.sm,
+    fontSize: 24,
+    fontWeight: '800',
+    color: colors.ink,
+  },
+  mapUnavailableText: {
+    marginTop: spacing.xs,
+    maxWidth: 280,
+    textAlign: 'center',
+    fontSize: 16,
+    lineHeight: 23,
+    color: colors.muted,
   },
   overlay: {
     flex: 1,

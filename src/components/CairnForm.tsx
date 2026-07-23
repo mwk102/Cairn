@@ -33,6 +33,7 @@ import {
   validateCoordinates,
 } from '@/utils/coordinates';
 import { formatDateInput, parseDateInput } from '@/utils/date';
+import { canUseNativeMap } from '@/utils/mapAvailability';
 
 const FALLBACK_COORDINATE = { latitude: 47.6205, longitude: -122.3493 };
 const CAIRN_MARKER_IMAGE = require('../../assets/markers/cairn-badge.png');
@@ -62,6 +63,7 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
   const notesTopRef = useRef(0);
   const insets = useSafeAreaInsets();
   const { requestLocation, permissionDenied } = useCurrentLocation();
+  const mapAvailable = canUseNativeMap();
   const [coordinate, setCoordinate] = useState<Coordinate>(
     initial ? { latitude: initial.latitude, longitude: initial.longitude } : FALLBACK_COORDINATE,
   );
@@ -506,22 +508,29 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
             <Text style={styles.errorText}>{coordinateError}</Text>
           ) : null}
           <View style={styles.mapWrap}>
-            <MapView
-              ref={mapRef}
-              provider={PROVIDER_GOOGLE}
-              style={StyleSheet.absoluteFill}
-              initialRegion={region}
-              pitchEnabled={false}
-              rotateEnabled={false}
-              scrollEnabled={false}
-              zoomEnabled={false}
-            >
-              <Marker
-                anchor={{ x: 0.5, y: 0.5 }}
-                coordinate={coordinate}
-                image={CAIRN_MARKER_IMAGE}
-              />
-            </MapView>
+            {mapAvailable ? (
+              <MapView
+                ref={mapRef}
+                provider={PROVIDER_GOOGLE}
+                style={StyleSheet.absoluteFill}
+                initialRegion={region}
+                pitchEnabled={false}
+                rotateEnabled={false}
+                scrollEnabled={false}
+                zoomEnabled={false}
+              >
+                <Marker
+                  anchor={{ x: 0.5, y: 0.5 }}
+                  coordinate={coordinate}
+                  image={CAIRN_MARKER_IMAGE}
+                />
+              </MapView>
+            ) : (
+              <View style={styles.mapUnavailableInline}>
+                <Text style={styles.mapUnavailableTitle}>Map key needed</Text>
+                <Text style={styles.mapUnavailableText}>Manual coordinates still work in this build.</Text>
+              </View>
+            )}
           </View>
         </View>
         {permissionDenied ? (
@@ -687,17 +696,24 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
             <View style={styles.chooserHeaderButton} />
           </View>
           <View style={styles.chooserMapFrame}>
-            <MapView
-              ref={chooserMapRef}
-              provider={PROVIDER_GOOGLE}
-              style={StyleSheet.absoluteFill}
-              initialRegion={draftRegion}
-              showsMyLocationButton={false}
-              toolbarEnabled={false}
-              onPanDrag={() => setDraftMoving(true)}
-              onPress={(event) => updateDraftLocation(event.nativeEvent.coordinate, true)}
-              onRegionChangeComplete={updateDraftFromRegion}
-            />
+            {mapAvailable ? (
+              <MapView
+                ref={chooserMapRef}
+                provider={PROVIDER_GOOGLE}
+                style={StyleSheet.absoluteFill}
+                initialRegion={draftRegion}
+                showsMyLocationButton={false}
+                toolbarEnabled={false}
+                onPanDrag={() => setDraftMoving(true)}
+                onPress={(event) => updateDraftLocation(event.nativeEvent.coordinate, true)}
+                onRegionChangeComplete={updateDraftFromRegion}
+              />
+            ) : (
+              <View style={styles.mapUnavailableInline}>
+                <Text style={styles.mapUnavailableTitle}>Map key needed</Text>
+                <Text style={styles.mapUnavailableText}>Paste or type coordinates to place this Cairn.</Text>
+              </View>
+            )}
             <View pointerEvents="box-none" style={styles.chooserMapOverlay}>
               <Pressable
               accessibilityRole="button"
@@ -717,13 +733,15 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
                 <Text style={styles.chooserHintText}>Move the map to place your Cairn</Text>
               </View>
             </View>
-            <View pointerEvents="none" style={styles.chooserCenterMarker}>
-              <Image
-                source={CAIRN_MARKER_IMAGE}
-                style={[styles.chooserCenterMarkerImage, draftMoving && styles.chooserCenterMarkerMoving]}
-              />
-              <View style={styles.chooserCenterShadow} />
-            </View>
+            {mapAvailable ? (
+              <View pointerEvents="none" style={styles.chooserCenterMarker}>
+                <Image
+                  source={CAIRN_MARKER_IMAGE}
+                  style={[styles.chooserCenterMarkerImage, draftMoving && styles.chooserCenterMarkerMoving]}
+                />
+                <View style={styles.chooserCenterShadow} />
+              </View>
+            ) : null}
           </View>
           <View style={[styles.chooserFooter, { paddingBottom: Math.max(insets.bottom + spacing.sm, spacing.lg) }]}>
             <View style={styles.chooserHandle} />
@@ -770,6 +788,24 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: colors.line,
+  },
+  mapUnavailableInline: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: spacing.lg,
+    backgroundColor: colors.sage,
+  },
+  mapUnavailableTitle: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  mapUnavailableText: {
+    marginTop: spacing.xs,
+    textAlign: 'center',
+    color: colors.muted,
+    lineHeight: 21,
   },
   coordinateBox: {
     borderRadius: 8,
