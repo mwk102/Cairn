@@ -3,15 +3,37 @@ import * as Crypto from 'expo-crypto';
 import { Cairn, CairnInput, CairnPhoto, PlaceType } from '@/types/cairn';
 import { getDb, initDb } from './db';
 
-type CairnRow = Omit<Cairn, 'isFavorite' | 'photos' | 'placeType'> & {
+type CairnRow = Omit<Cairn, 'isFavorite' | 'photos' | 'placeType' | 'tags'> & {
   isFavorite: number;
   placeType: string;
+  tags: string;
 };
+
+function normalizeTags(tags: string[]) {
+  return Array.from(
+    new Set(
+      tags
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+function parseTags(value: string) {
+  try {
+    const parsed = JSON.parse(value);
+    if (!Array.isArray(parsed)) return [];
+    return normalizeTags(parsed.filter((tag): tag is string => typeof tag === 'string'));
+  } catch {
+    return [];
+  }
+}
 
 function mapCairn(row: CairnRow, photos: CairnPhoto[]): Cairn {
   return {
     ...row,
     placeType: row.placeType as PlaceType,
+    tags: parseTags(row.tags),
     isFavorite: row.isFavorite === 1,
     photos,
   };
@@ -67,12 +89,13 @@ export async function createCairn(input: CairnInput) {
   const primaryPhotoId = primaryPhotoIndex >= 0
     ? photoIds[primaryPhotoIndex]
     : input.primaryPhotoId ?? photoIds[0] ?? null;
+  const tags = JSON.stringify(normalizeTags(input.tags));
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO cairns
-      (id, name, story, notes, latitude, longitude, placeType, isFavorite, primaryPhotoId, createdAt, updatedAt, lastVisitedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, name, story, notes, latitude, longitude, placeType, tags, isFavorite, primaryPhotoId, createdAt, updatedAt, lastVisitedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       input.name.trim(),
       input.story.trim(),
@@ -80,6 +103,7 @@ export async function createCairn(input: CairnInput) {
       input.latitude,
       input.longitude,
       input.placeType,
+      tags,
       input.isFavorite ? 1 : 0,
       primaryPhotoId,
       now,
@@ -116,11 +140,12 @@ export async function updateCairn(id: string, input: CairnInput) {
     : input.primaryPhotoId && photoIds.includes(input.primaryPhotoId)
       ? input.primaryPhotoId
       : photoIds[0] ?? null;
+  const tags = JSON.stringify(normalizeTags(input.tags));
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE cairns SET
-        name = ?, story = ?, notes = ?, latitude = ?, longitude = ?, placeType = ?,
+        name = ?, story = ?, notes = ?, latitude = ?, longitude = ?, placeType = ?, tags = ?,
         isFavorite = ?, primaryPhotoId = ?, lastVisitedAt = ?, updatedAt = ?
       WHERE id = ?`,
       input.name.trim(),
@@ -129,6 +154,7 @@ export async function updateCairn(id: string, input: CairnInput) {
       input.latitude,
       input.longitude,
       input.placeType,
+      tags,
       input.isFavorite ? 1 : 0,
       primaryPhotoId,
       lastVisitedAt,

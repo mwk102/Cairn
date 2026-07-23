@@ -3,6 +3,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 
 import { colors, spacing } from '@/theme';
+import { persistPickedPhoto } from '@/utils/photoStorage';
 
 type Props = {
   photos: string[];
@@ -20,7 +21,10 @@ export function PhotoStrip({ photos, onChange }: Props) {
       selectionLimit: 10 - photos.length,
     });
     if (!result.canceled) {
-      onChange([...photos, ...result.assets.map((asset) => asset.uri)].slice(0, 10));
+      const persistedPhotos = await Promise.all(
+        result.assets.map((asset) => persistPickedPhoto(asset.uri)),
+      );
+      onChange([...photos, ...persistedPhotos].slice(0, 10));
     }
   }
 

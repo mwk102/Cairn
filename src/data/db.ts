@@ -27,6 +27,7 @@ export async function initDb() {
       latitude REAL NOT NULL,
       longitude REAL NOT NULL,
       placeType TEXT NOT NULL,
+      tags TEXT NOT NULL DEFAULT '[]',
       isFavorite INTEGER NOT NULL,
       primaryPhotoId TEXT,
       createdAt TEXT NOT NULL,
@@ -49,5 +50,8 @@ export async function initDb() {
   }
   if (!columns.some((column) => column.name === 'story')) {
     await db.execAsync("ALTER TABLE cairns ADD COLUMN story TEXT NOT NULL DEFAULT '';");
+  }
+  if (!columns.some((column) => column.name === 'tags')) {
+    await db.execAsync("ALTER TABLE cairns ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';");
   }
 }

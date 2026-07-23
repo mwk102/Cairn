@@ -68,6 +68,8 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
   const [name, setName] = useState(initial?.name ?? '');
   const [story, setStory] = useState(initial?.story ?? '');
   const [notes, setNotes] = useState(initial?.notes ?? '');
+  const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
+  const [tagInput, setTagInput] = useState('');
   const [placeType, setPlaceType] = useState<PlaceType>(initial?.placeType ?? 'Campsite');
   const [isFavorite, setIsFavorite] = useState(initial?.isFavorite ?? false);
   const [photos, setPhotos] = useState<string[]>(initial?.photos.map((photo) => photo.localUri) ?? []);
@@ -83,6 +85,7 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
   const [coordinateInputDirty, setCoordinateInputDirty] = useState(false);
   const [coordinateError, setCoordinateError] = useState<string | null>(null);
   const [swapSuggestion, setSwapSuggestion] = useState<Coordinate | null>(null);
+  const [locationChanged, setLocationChanged] = useState(!initial);
   const [locating, setLocating] = useState(false);
   const [chooserOpen, setChooserOpen] = useState(false);
   const [chooserLocating, setChooserLocating] = useState(false);
@@ -90,8 +93,9 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
   const [draftCoordinate, setDraftCoordinate] = useState<Coordinate>(coordinate);
   const [draftMoving, setDraftMoving] = useState(false);
 
-  function updateCoordinate(next: Coordinate) {
+  function updateCoordinate(next: Coordinate, changed = true) {
     setCoordinate(next);
+    setLocationChanged(changed);
     setLatitudeText(formatCoordinateValue(next.latitude));
     setLongitudeText(formatCoordinateValue(next.longitude));
     setCoordinateInput('');
@@ -252,6 +256,33 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
     setChooserOpen(false);
   }
 
+  function savedCoordinate() {
+    if (!initial || locationChanged) {
+      return coordinateInputDirty ? applyCombinedCoordinate() : applyManualCoordinate();
+    }
+
+    return {
+      latitude: initial.latitude,
+      longitude: initial.longitude,
+    };
+  }
+
+  function addTagsFromInput() {
+    const nextTags = tagInput
+      .split(',')
+      .map((tag) => tag.trim())
+      .filter(Boolean);
+
+    if (nextTags.length === 0) return;
+
+    setTags((current) => Array.from(new Set([...current, ...nextTags])));
+    setTagInput('');
+  }
+
+  function removeTag(tagToRemove: string) {
+    setTags((current) => current.filter((tag) => tag !== tagToRemove));
+  }
+
   async function save() {
     if (!name.trim()) {
       setError('Name this place before saving.');
@@ -269,7 +300,7 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
 
       lastVisitedAt = parsedLastVisitedAt;
     }
-    const coordinateToSave = coordinateInputDirty ? applyCombinedCoordinate() : applyManualCoordinate();
+    const coordinateToSave = savedCoordinate();
 
     if (!coordinateToSave) {
       return;
@@ -288,6 +319,7 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
         latitude: coordinateToSave.latitude,
         longitude: coordinateToSave.longitude,
         placeType,
+        tags,
         isFavorite,
         lastVisitedAt,
         primaryPhotoId: initial?.primaryPhotoId ?? null,
@@ -401,6 +433,7 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
                   onChangeText={(value) => {
                     setCoordinateInput(value);
                     setCoordinateInputDirty(true);
+                    setLocationChanged(true);
                     clearCoordinateFeedback();
                   }}
                   placeholder="47.90081, -119.17627"
@@ -426,6 +459,7 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
                   onChangeText={(value) => {
                     setLatitudeText(value);
                     setCoordinateInputDirty(false);
+                    setLocationChanged(true);
                     clearCoordinateFeedback();
                   }}
                   placeholder="47.62050"
@@ -443,6 +477,7 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
                   onChangeText={(value) => {
                     setLongitudeText(value);
                     setCoordinateInputDirty(false);
+                    setLocationChanged(true);
                     clearCoordinateFeedback();
                   }}
                   placeholder="-122.34930"
@@ -546,11 +581,54 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
             value={notes}
             onChangeText={setNotes}
             onFocus={scrollNotesIntoView}
-            placeholder="Road conditions, cell service, toilets, fire rings..."
+            placeholder={'- Road conditions\n- Cell service\n- Toilets, fire rings...'}
             multiline
             maxLength={500}
             style={styles.notes}
           />
+        </View>
+        <View style={styles.group}>
+          <Text style={styles.label}>Tags</Text>
+          {tags.length > 0 ? (
+            <View style={styles.tagList}>
+              {tags.map((tag) => (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Remove ${tag} tag`}
+                  key={tag}
+                  onPress={() => removeTag(tag)}
+                  style={({ pressed }) => [styles.tagChip, pressed && styles.pressed]}
+                >
+                  <Text style={styles.tagText}>{tag}</Text>
+                  <Feather name="x" size={14} color={colors.moss} />
+                </Pressable>
+              ))}
+            </View>
+          ) : (
+            <Text style={styles.help}>Add practical details you will want to scan later.</Text>
+          )}
+          <View style={styles.tagInputRow}>
+            <Field
+              label="Add tag"
+              value={tagInput}
+              onChangeText={setTagInput}
+              onSubmitEditing={addTagsFromInput}
+              onBlur={addTagsFromInput}
+              placeholder="4x4 access, toilets, Cell Service"
+              autoCapitalize="none"
+              autoCorrect={false}
+              containerStyle={styles.tagField}
+              returnKeyType="done"
+            />
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Add tag"
+              onPress={addTagsFromInput}
+              style={({ pressed }) => [styles.tagAddButton, pressed && styles.pressed]}
+            >
+              <Feather name="plus" size={18} color={colors.white} />
+            </Pressable>
+          </View>
         </View>
         <PhotoStrip photos={photos} onChange={setPhotos} />
         {initial && photos.length > 0 ? (
@@ -849,6 +927,44 @@ const styles = StyleSheet.create({
   story: {
     minHeight: 150,
     textAlignVertical: 'top',
+  },
+  tagList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  tagChip: {
+    minHeight: 34,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.16)',
+    backgroundColor: 'rgba(203, 216, 198, 0.5)',
+    paddingHorizontal: spacing.sm,
+  },
+  tagText: {
+    color: colors.ink,
+    fontSize: type.small,
+    fontWeight: '800',
+  },
+  tagInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: spacing.sm,
+  },
+  tagField: {
+    flex: 1,
+    minWidth: 0,
+  },
+  tagAddButton: {
+    width: 50,
+    height: 50,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.moss,
   },
   heroOptions: {
     gap: spacing.sm,

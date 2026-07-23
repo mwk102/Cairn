@@ -97,6 +97,7 @@ export default function MapHome() {
         cairn.placeType,
         cairn.story,
         cairn.notes,
+        ...cairn.tags,
       ].some((value) => value.toLowerCase().includes(trimmedSearchQuery));
     });
 
@@ -470,6 +471,13 @@ export default function MapHome() {
                   </Text>
                 </View>
               )}
+              {selectedCairn.tags.length > 0 ? (
+                <View style={styles.previewTagRow}>
+                  {selectedCairn.tags.slice(0, 3).map((tag) => (
+                    <Text numberOfLines={1} key={tag} style={styles.previewTagChip}>{tag}</Text>
+                  ))}
+                </View>
+              ) : null}
               <View style={styles.previewUtilityRow}>
                 <Pressable
                   accessibilityRole="button"
@@ -693,6 +701,11 @@ export default function MapHome() {
                     {previewMemoryFor(item) ? (
                       <Text numberOfLines={1} style={styles.cairnMemory}>
                         {previewMemoryFor(item)}
+                      </Text>
+                    ) : null}
+                    {item.tags.length > 0 ? (
+                      <Text numberOfLines={1} style={styles.cairnTags}>
+                        {item.tags.slice(0, 3).join('  ·  ')}
                       </Text>
                     ) : null}
                   </View>
@@ -1065,6 +1078,25 @@ const styles = StyleSheet.create({
     paddingVertical: spacing.xs,
     marginTop: spacing.sm,
   },
+  previewTagRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  previewTagChip: {
+    maxWidth: 118,
+    overflow: 'hidden',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.14)',
+    backgroundColor: colors.cream,
+    color: colors.ink,
+    fontSize: 12,
+    fontWeight: '800',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 5,
+  },
   previewUtilityRow: {
     flexDirection: 'row',
     gap: spacing.sm,
@@ -1287,6 +1319,12 @@ const styles = StyleSheet.create({
   cairnMemory: {
     color: colors.muted,
     fontSize: type.small,
+    marginTop: 2,
+  },
+  cairnTags: {
+    color: colors.moss,
+    fontSize: 12,
+    fontWeight: '800',
     marginTop: 2,
   },
 });

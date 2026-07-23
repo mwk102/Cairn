@@ -16,6 +16,7 @@ import {
 } from 'react-native';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 
 import { Button } from '@/components/Button';
 import { deleteCairn, getCairn, setCairnFavorite } from '@/data/cairns';
@@ -23,6 +24,19 @@ import { colors, spacing, type } from '@/theme';
 import { Cairn, PLACE_TYPE_ICONS } from '@/types/cairn';
 import { formatCoordinates } from '@/utils/coordinates';
 import { formatDate } from '@/utils/date';
+
+function formattedNoteLines(notes: string) {
+  return notes
+    .split(/\r?\n/)
+    .map((line, index) => {
+      const bulletMatch = line.match(/^\s*[-*•]\s+(.+)$/);
+      return {
+        id: `${index}-${line}`,
+        text: bulletMatch?.[1] ?? line.trim(),
+        type: bulletMatch ? 'bullet' : line.trim() ? 'text' : 'space',
+      };
+    });
+}
 
 export default function CairnDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -52,6 +66,13 @@ export default function CairnDetail() {
       scale: new Animated.Value(0.7),
     })),
   ).current;
+
+  async function copyCoordinates() {
+    if (!cairn) return;
+
+    await Clipboard.setStringAsync(formatCoordinates(cairn));
+    Alert.alert('Coordinates copied', formatCoordinates(cairn));
+  }
 
   useFocusEffect(
     useCallback(() => {
@@ -231,7 +252,15 @@ export default function CairnDetail() {
           <View style={styles.detailText}>
             <Text style={styles.detailLabel}>Location</Text>
             <Text style={styles.detailValue}>Saved coordinates</Text>
-            <Text style={styles.coordinateText}>{formatCoordinates(cairn)}</Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Copy saved coordinates"
+              onPress={copyCoordinates}
+              style={({ pressed }) => [styles.coordinateCopyButton, pressed && styles.pressed]}
+            >
+              <Text style={styles.coordinateText}>{formatCoordinates(cairn)}</Text>
+              <Feather name="copy" size={14} color={colors.moss} />
+            </Pressable>
           </View>
         </View>
         <View style={styles.detailRow}>
@@ -251,11 +280,52 @@ export default function CairnDetail() {
       </View>
       <View style={styles.storyBlock}>
         <Text style={styles.sectionTitle}>Story</Text>
-        <Text style={styles.storyText}>{cairn.story || 'No story yet.'}</Text>
+        <View style={styles.storyCard}>
+          <View style={styles.storyRail} />
+          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.storyMark}>
+            <View style={styles.storyStone0} />
+            <View style={styles.storyStone1} />
+            <View style={styles.storyStone2} />
+          </View>
+          <Text style={styles.storyText}>{cairn.story || 'No story yet.'}</Text>
+        </View>
       </View>
+      {cairn.tags.length > 0 ? (
+        <View style={styles.tagsBlock}>
+          <Text style={styles.sectionTitle}>Tags</Text>
+          <View style={styles.tagList}>
+            {cairn.tags.map((tag) => (
+              <View key={tag} style={styles.tagChip}>
+                <Text style={styles.tagChipText}>{tag}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      ) : null}
       <View style={styles.notesBlock}>
         <Text style={styles.sectionTitle}>Notes</Text>
-        <Text style={styles.notesText}>{cairn.notes || 'No notes yet.'}</Text>
+        {cairn.notes ? (
+          <View style={styles.notesFormatted}>
+            {formattedNoteLines(cairn.notes).map((line) => {
+              if (line.type === 'space') {
+                return <View key={line.id} style={styles.noteSpacer} />;
+              }
+
+              if (line.type === 'bullet') {
+                return (
+                  <View key={line.id} style={styles.noteBulletRow}>
+                    <Text style={styles.noteBullet}>•</Text>
+                    <Text style={styles.notesText}>{line.text}</Text>
+                  </View>
+                );
+              }
+
+              return <Text key={line.id} style={styles.notesText}>{line.text}</Text>;
+            })}
+          </View>
+        ) : (
+          <Text style={styles.notesText}>No notes yet.</Text>
+        )}
       </View>
       {cairn.photos.length > 1 ? (
         <View style={styles.photoGrid}>
@@ -380,6 +450,9 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.cream,
   },
+  pressed: {
+    opacity: 0.72,
+  },
   hero: {
     height: 230,
     borderRadius: 8,
@@ -461,19 +534,103 @@ const styles = StyleSheet.create({
     color: colors.ink,
     marginTop: 2,
   },
+  coordinateCopyButton: {
+    minHeight: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: spacing.xs,
+    borderRadius: 8,
+    paddingRight: spacing.sm,
+    marginTop: 2,
+  },
   coordinateText: {
     color: colors.muted,
     fontSize: type.small,
-    marginTop: 2,
   },
   storyBlock: {
     gap: spacing.sm,
   },
+  storyCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.14)',
+    backgroundColor: 'rgba(250, 248, 243, 0.82)',
+    padding: spacing.md,
+    paddingLeft: spacing.lg,
+    gap: spacing.sm,
+    overflow: 'hidden',
+  },
+  storyRail: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 5,
+    backgroundColor: colors.sage,
+  },
+  storyMark: {
+    width: 34,
+    height: 24,
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  storyStone0: {
+    width: 8,
+    height: 5,
+    borderRadius: 6,
+    backgroundColor: colors.moss,
+    marginBottom: 2,
+    transform: [{ rotate: '-7deg' }, { translateX: 1 }],
+  },
+  storyStone1: {
+    width: 17,
+    height: 6,
+    borderRadius: 9,
+    backgroundColor: colors.moss,
+    marginBottom: 2,
+    transform: [{ rotate: '4deg' }, { translateX: -1 }],
+  },
+  storyStone2: {
+    width: 30,
+    height: 7,
+    borderRadius: 12,
+    backgroundColor: colors.pine,
+    transform: [{ rotate: '-2deg' }],
+  },
   storyText: {
     color: colors.ink,
-    fontSize: 18,
+    fontSize: 17,
     lineHeight: 27,
-    fontWeight: '500',
+    fontWeight: '600',
+  },
+  tagsBlock: {
+    gap: spacing.xs,
+    marginBottom: spacing.xs,
+  },
+  tagList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    columnGap: spacing.xs,
+    rowGap: 6,
+  },
+  tagChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.13)',
+    backgroundColor: 'rgba(203, 216, 198, 0.38)',
+    minHeight: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 9,
+    paddingVertical: 2,
+  },
+  tagChipText: {
+    color: colors.ink,
+    fontSize: 12,
+    lineHeight: 14,
+    fontWeight: '700',
+    includeFontPadding: false,
   },
   notesBlock: {
     borderRadius: 8,
@@ -483,7 +640,27 @@ const styles = StyleSheet.create({
     padding: spacing.md,
     gap: spacing.sm,
   },
+  notesFormatted: {
+    gap: 7,
+  },
+  noteBulletRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  noteBullet: {
+    width: 14,
+    color: colors.moss,
+    fontSize: type.body,
+    lineHeight: 24,
+    fontWeight: '900',
+    textAlign: 'center',
+  },
+  noteSpacer: {
+    height: spacing.xs,
+  },
   notesText: {
+    flex: 1,
     color: colors.ink,
     fontSize: type.body,
     lineHeight: 24,

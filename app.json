@@ -7,8 +7,22 @@
     "scheme": "cairn",
     "userInterfaceStyle": "light",
     "newArchEnabled": false,
+    "splash": {
+      "image": "./assets/splash.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#faf8f2"
+    },
     "plugins": [
       "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash.png",
+          "imageWidth": 180,
+          "resizeMode": "contain",
+          "backgroundColor": "#faf8f2"
+        }
+      ],
       "expo-sqlite",
       [
         "expo-location",

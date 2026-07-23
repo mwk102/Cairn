@@ -39,6 +39,7 @@ export type Cairn = {
   latitude: number;
   longitude: number;
   placeType: PlaceType;
+  tags: string[];
   isFavorite: boolean;
   createdAt: string;
   updatedAt: string;
@@ -54,6 +55,7 @@ export type CairnInput = {
   latitude: number;
   longitude: number;
   placeType: PlaceType;
+  tags: string[];
   isFavorite: boolean;
   lastVisitedAt?: string;
   primaryPhotoId?: string | null;
