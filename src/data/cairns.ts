@@ -1,13 +1,15 @@
 import * as Crypto from 'expo-crypto';
 
-import { Cairn, CairnInput, CairnPhoto, PLACE_TYPES, PlaceType } from '@/types/cairn';
+import { Cairn, CairnInput, CairnPhoto, PLACE_TYPES, PlaceType, VisitLog, VisitLogInput } from '@/types/cairn';
 import { getDb, initDb } from './db';
 
-type CairnRow = Omit<Cairn, 'isFavorite' | 'photos' | 'placeType' | 'tags'> & {
+type CairnRow = Omit<Cairn, 'isFavorite' | 'photos' | 'placeType' | 'tags' | 'visitLogs'> & {
   isFavorite: number;
   placeType: string;
   tags: string;
 };
+
+type VisitLogRow = Omit<VisitLog, 'photos'>;
 
 type CairnMigrationEntry = {
   id?: unknown;
@@ -91,13 +93,21 @@ function cleanMigrationEntry(entry: CairnMigrationEntry, now: string) {
   };
 }
 
-function mapCairn(row: CairnRow, photos: CairnPhoto[]): Cairn {
+function galleryPhotos(photos: CairnPhoto[]) {
+  return photos.filter((photo) => !photo.visitLogId);
+}
+
+function mapCairn(row: CairnRow, photos: CairnPhoto[], visitLogs: VisitLog[]): Cairn {
+  const newestVisit = visitLogs[0];
+
   return {
     ...row,
     placeType: row.placeType as PlaceType,
     tags: parseTags(row.tags),
     isFavorite: row.isFavorite === 1,
+    lastVisitedAt: newestVisit?.visitDate ?? row.createdAt,
     photos,
+    visitLogs,
   };
 }
 
@@ -117,6 +127,37 @@ async function photosFor(cairnIds: string[]) {
   }, new Map<string, CairnPhoto[]>());
 }
 
+async function visitLogsFor(cairnIds: string[], photosByCairn: Map<string, CairnPhoto[]>) {
+  if (cairnIds.length === 0) return new Map<string, VisitLog[]>();
+  const db = await getDb();
+  const placeholders = cairnIds.map(() => '?').join(',');
+  const rows = await db.getAllAsync<VisitLogRow>(
+    `SELECT * FROM visit_logs WHERE cairnId IN (${placeholders}) ORDER BY visitDate DESC, createdAt DESC`,
+    ...cairnIds,
+  );
+  const photosByVisitLog = new Map<string, CairnPhoto[]>();
+
+  for (const photos of photosByCairn.values()) {
+    for (const photo of photos) {
+      if (!photo.visitLogId) continue;
+      const group = photosByVisitLog.get(photo.visitLogId) ?? [];
+      group.push(photo);
+      photosByVisitLog.set(photo.visitLogId, group);
+    }
+  }
+
+  return rows.reduce((map, row) => {
+    const visitLog: VisitLog = {
+      ...row,
+      photos: photosByVisitLog.get(row.id) ?? [],
+    };
+    const group = map.get(row.cairnId) ?? [];
+    group.push(visitLog);
+    map.set(row.cairnId, group);
+    return map;
+  }, new Map<string, VisitLog[]>());
+}
+
 export async function listCairns() {
   await initDb();
   const db = await getDb();
@@ -124,7 +165,8 @@ export async function listCairns() {
     'SELECT * FROM cairns ORDER BY updatedAt DESC',
   );
   const groupedPhotos = await photosFor(rows.map((row) => row.id));
-  return rows.map((row) => mapCairn(row, groupedPhotos.get(row.id) ?? []));
+  const groupedVisitLogs = await visitLogsFor(rows.map((row) => row.id), groupedPhotos);
+  return rows.map((row) => mapCairn(row, groupedPhotos.get(row.id) ?? [], groupedVisitLogs.get(row.id) ?? []));
 }
 
 export async function getCairn(id: string) {
@@ -136,7 +178,8 @@ export async function getCairn(id: string) {
   );
   if (!row) return null;
   const groupedPhotos = await photosFor([id]);
-  return mapCairn(row, groupedPhotos.get(id) ?? []);
+  const groupedVisitLogs = await visitLogsFor([id], groupedPhotos);
+  return mapCairn(row, groupedPhotos.get(id) ?? [], groupedVisitLogs.get(id) ?? []);
 }
 
 export async function createCairn(input: CairnInput) {
@@ -174,7 +217,7 @@ export async function createCairn(input: CairnInput) {
     );
     for (const [index, localUri] of input.photos.entries()) {
       await db.runAsync(
-        'INSERT INTO photos (id, cairnId, localUri, createdAt) VALUES (?, ?, ?, ?)',
+        'INSERT INTO photos (id, cairnId, visitLogId, localUri, createdAt) VALUES (?, ?, NULL, ?, ?)',
         photoIds[index],
         id,
         localUri,
@@ -190,9 +233,8 @@ export async function updateCairn(id: string, input: CairnInput) {
   await initDb();
   const db = await getDb();
   const now = new Date().toISOString();
-  const lastVisitedAt = input.lastVisitedAt ?? now;
   const previous = await getCairn(id);
-  const photoIdByUri = new Map(previous?.photos.map((photo) => [photo.localUri, photo.id]) ?? []);
+  const photoIdByUri = new Map(galleryPhotos(previous?.photos ?? []).map((photo) => [photo.localUri, photo.id]));
   const photoIds = input.photos.map((localUri) => photoIdByUri.get(localUri) ?? Crypto.randomUUID());
   const primaryPhotoIndex = input.primaryPhotoUri
     ? input.photos.indexOf(input.primaryPhotoUri)
@@ -208,7 +250,7 @@ export async function updateCairn(id: string, input: CairnInput) {
     await db.runAsync(
       `UPDATE cairns SET
         name = ?, story = ?, notes = ?, latitude = ?, longitude = ?, placeType = ?, tags = ?,
-        isFavorite = ?, primaryPhotoId = ?, lastVisitedAt = ?, updatedAt = ?
+        isFavorite = ?, primaryPhotoId = ?, updatedAt = ?
       WHERE id = ?`,
       input.name.trim(),
       input.story.trim(),
@@ -219,14 +261,13 @@ export async function updateCairn(id: string, input: CairnInput) {
       tags,
       input.isFavorite ? 1 : 0,
       primaryPhotoId,
-      lastVisitedAt,
       now,
       id,
     );
-    await db.runAsync('DELETE FROM photos WHERE cairnId = ?', id);
+    await db.runAsync('DELETE FROM photos WHERE cairnId = ? AND visitLogId IS NULL', id);
     for (const [index, localUri] of input.photos.entries()) {
       await db.runAsync(
-        'INSERT INTO photos (id, cairnId, localUri, createdAt) VALUES (?, ?, ?, ?)',
+        'INSERT INTO photos (id, cairnId, visitLogId, localUri, createdAt) VALUES (?, ?, NULL, ?, ?)',
         photoIds[index],
         id,
         localUri,
@@ -241,7 +282,106 @@ export async function deleteCairn(id: string) {
   const db = await getDb();
   await db.withTransactionAsync(async () => {
     await db.runAsync('DELETE FROM photos WHERE cairnId = ?', id);
+    await db.runAsync('DELETE FROM visit_logs WHERE cairnId = ?', id);
     await db.runAsync('DELETE FROM cairns WHERE id = ?', id);
+  });
+}
+
+export async function getVisitLog(cairnId: string, visitLogId: string) {
+  await initDb();
+  const db = await getDb();
+  const row = await db.getFirstAsync<VisitLogRow>(
+    'SELECT * FROM visit_logs WHERE id = ? AND cairnId = ?',
+    visitLogId,
+    cairnId,
+  );
+
+  if (!row) return null;
+
+  const photos = await db.getAllAsync<CairnPhoto>(
+    'SELECT * FROM photos WHERE visitLogId = ? ORDER BY createdAt ASC',
+    visitLogId,
+  );
+
+  return { ...row, photos };
+}
+
+export async function createVisitLog(cairnId: string, input: VisitLogInput) {
+  await initDb();
+  const db = await getDb();
+  const now = new Date().toISOString();
+  const id = Crypto.randomUUID();
+  const photoIds = input.photos.map(() => Crypto.randomUUID());
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT INTO visit_logs
+      (id, cairnId, visitDate, notes, createdAt, updatedAt)
+      VALUES (?, ?, ?, ?, ?, ?)`,
+      id,
+      cairnId,
+      input.visitDate,
+      input.notes.trim(),
+      now,
+      now,
+    );
+    for (const [index, localUri] of input.photos.entries()) {
+      await db.runAsync(
+        'INSERT INTO photos (id, cairnId, visitLogId, localUri, createdAt) VALUES (?, ?, ?, ?, ?)',
+        photoIds[index],
+        cairnId,
+        id,
+        localUri,
+        now,
+      );
+    }
+    await db.runAsync('UPDATE cairns SET updatedAt = ? WHERE id = ?', now, cairnId);
+  });
+
+  return id;
+}
+
+export async function updateVisitLog(cairnId: string, visitLogId: string, input: VisitLogInput) {
+  await initDb();
+  const db = await getDb();
+  const now = new Date().toISOString();
+  const previous = await getVisitLog(cairnId, visitLogId);
+  const photoIdByUri = new Map(previous?.photos.map((photo) => [photo.localUri, photo.id]) ?? []);
+  const photoIds = input.photos.map((localUri) => photoIdByUri.get(localUri) ?? Crypto.randomUUID());
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      'UPDATE visit_logs SET visitDate = ?, notes = ?, updatedAt = ? WHERE id = ? AND cairnId = ?',
+      input.visitDate,
+      input.notes.trim(),
+      now,
+      visitLogId,
+      cairnId,
+    );
+    await db.runAsync('DELETE FROM photos WHERE visitLogId = ?', visitLogId);
+    for (const [index, localUri] of input.photos.entries()) {
+      await db.runAsync(
+        'INSERT INTO photos (id, cairnId, visitLogId, localUri, createdAt) VALUES (?, ?, ?, ?, ?)',
+        photoIds[index],
+        cairnId,
+        visitLogId,
+        localUri,
+        now,
+      );
+    }
+    await db.runAsync('UPDATE cairns SET updatedAt = ? WHERE id = ?', now, cairnId);
+  });
+}
+
+export async function deleteVisitLog(cairnId: string, visitLogId: string) {
+  await initDb();
+  const db = await getDb();
+  const now = new Date().toISOString();
+
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM photos WHERE visitLogId = ?', visitLogId);
+    await db.runAsync('DELETE FROM visit_logs WHERE id = ? AND cairnId = ?', visitLogId, cairnId);
+    await db.runAsync('UPDATE cairns SET updatedAt = ? WHERE id = ?', now, cairnId);
   });
 }
 

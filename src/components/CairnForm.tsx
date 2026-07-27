@@ -32,7 +32,6 @@ import {
   parseCoordinateInput,
   validateCoordinates,
 } from '@/utils/coordinates';
-import { formatDateInput, parseDateInput } from '@/utils/date';
 import { canUseNativeMap } from '@/utils/mapAvailability';
 
 const FALLBACK_COORDINATE = { latitude: 47.6205, longitude: -122.3493 };
@@ -79,8 +78,6 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
   const [primaryPhotoUri, setPrimaryPhotoUri] = useState<string | null>(initialPrimaryPhoto?.localUri ?? null);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [lastVisitedText, setLastVisitedText] = useState(initial ? formatDateInput(initial.lastVisitedAt) : '');
-  const [lastVisitedError, setLastVisitedError] = useState<string | null>(null);
   const [latitudeText, setLatitudeText] = useState(formatCoordinateValue(coordinate.latitude));
   const [longitudeText, setLongitudeText] = useState(formatCoordinateValue(coordinate.longitude));
   const [coordinateInput, setCoordinateInput] = useState('');
@@ -290,18 +287,6 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
       setError('Name this place before saving.');
       return;
     }
-    let lastVisitedAt: string | undefined;
-
-    if (initial) {
-      const parsedLastVisitedAt = parseDateInput(lastVisitedText);
-
-      if (!parsedLastVisitedAt) {
-        setLastVisitedError('Use YYYY-MM-DD, like 2024-07-09.');
-        return;
-      }
-
-      lastVisitedAt = parsedLastVisitedAt;
-    }
     const coordinateToSave = savedCoordinate();
 
     if (!coordinateToSave) {
@@ -323,7 +308,6 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
         placeType,
         tags,
         isFavorite,
-        lastVisitedAt,
         primaryPhotoId: initial?.primaryPhotoId ?? null,
         primaryPhotoUri,
         photos,
@@ -552,22 +536,6 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
           <Text style={styles.label}>Place type</Text>
           <PlaceTypePicker value={placeType} onChange={setPlaceType} />
         </View>
-        {initial ? (
-          <Field
-            label="Last visited"
-            value={lastVisitedText}
-            onChangeText={(value) => {
-              setLastVisitedText(value);
-              setLastVisitedError(null);
-            }}
-            placeholder="2024-07-09"
-            keyboardType="numbers-and-punctuation"
-            inputMode="numeric"
-            autoCapitalize="none"
-            autoCorrect={false}
-            error={lastVisitedError ?? undefined}
-          />
-        ) : null}
         <View onLayout={(event) => {
           storyTopRef.current = event.nativeEvent.layout.y;
         }}>
@@ -586,11 +554,11 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
           notesTopRef.current = event.nativeEvent.layout.y;
         }}>
           <Field
-            label="Notes"
+            label="Reference Notes"
             value={notes}
             onChangeText={setNotes}
             onFocus={scrollNotesIntoView}
-            placeholder={'- Road conditions\n- Cell service\n- Toilets, fire rings...'}
+            placeholder={'- Rough road\n- Cell Service\n- Toilets, fire rings...'}
             multiline
             maxLength={500}
             style={styles.notes}

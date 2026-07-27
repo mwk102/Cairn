@@ -38,8 +38,19 @@ export async function initDb() {
     CREATE TABLE IF NOT EXISTS photos (
       id TEXT PRIMARY KEY NOT NULL,
       cairnId TEXT NOT NULL,
+      visitLogId TEXT,
       localUri TEXT NOT NULL,
       createdAt TEXT NOT NULL,
+      FOREIGN KEY (cairnId) REFERENCES cairns(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS visit_logs (
+      id TEXT PRIMARY KEY NOT NULL,
+      cairnId TEXT NOT NULL,
+      visitDate TEXT NOT NULL,
+      notes TEXT NOT NULL DEFAULT '',
+      createdAt TEXT NOT NULL,
+      updatedAt TEXT NOT NULL,
       FOREIGN KEY (cairnId) REFERENCES cairns(id) ON DELETE CASCADE
     );
   `);
@@ -53,5 +64,10 @@ export async function initDb() {
   }
   if (!columns.some((column) => column.name === 'tags')) {
     await db.execAsync("ALTER TABLE cairns ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';");
+  }
+
+  const photoColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(photos)');
+  if (!photoColumns.some((column) => column.name === 'visitLogId')) {
+    await db.execAsync('ALTER TABLE photos ADD COLUMN visitLogId TEXT;');
   }
 }

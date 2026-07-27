@@ -17,11 +17,12 @@ import {
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Button } from '@/components/Button';
 import { deleteCairn, getCairn, setCairnFavorite } from '@/data/cairns';
 import { colors, spacing, type } from '@/theme';
-import { Cairn, PLACE_TYPE_ICONS } from '@/types/cairn';
+import { Cairn, PLACE_TYPE_ICONS, VisitLog } from '@/types/cairn';
 import { formatCoordinates } from '@/utils/coordinates';
 import { formatDate } from '@/utils/date';
 
@@ -29,7 +30,7 @@ function formattedNoteLines(notes: string) {
   return notes
     .split(/\r?\n/)
     .map((line, index) => {
-      const bulletMatch = line.match(/^\s*[-*•]\s+(.+)$/);
+      const bulletMatch = line.match(/^\s*[-*\u2022]\s+(.+)$/);
       return {
         id: `${index}-${line}`,
         text: bulletMatch?.[1] ?? line.trim(),
@@ -38,11 +39,19 @@ function formattedNoteLines(notes: string) {
     });
 }
 
+function previewText(value: string) {
+  const trimmed = value.trim().replace(/\s+/g, ' ');
+  if (!trimmed) return 'No notes for this visit.';
+  return trimmed.length > 150 ? `${trimmed.slice(0, 150)}...` : trimmed;
+}
+
 export default function CairnDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const [cairn, setCairn] = useState<Cairn | null>(null);
   const [viewingPhotoIndex, setViewingPhotoIndex] = useState<number | null>(null);
+  const [showAllVisits, setShowAllVisits] = useState(false);
   const [clearing, setClearing] = useState(false);
   const clearStoneStyles = [styles.clearStone0, styles.clearStone1, styles.clearStone2, styles.clearStone3];
   const clearStoneTransforms = [
@@ -66,13 +75,6 @@ export default function CairnDetail() {
       scale: new Animated.Value(0.7),
     })),
   ).current;
-
-  async function copyCoordinates() {
-    if (!cairn) return;
-
-    await Clipboard.setStringAsync(formatCoordinates(cairn));
-    Alert.alert('Coordinates copied', formatCoordinates(cairn));
-  }
 
   useFocusEffect(
     useCallback(() => {
@@ -118,6 +120,7 @@ export default function CairnDetail() {
           useNativeDriver: true,
         }),
       ]);
+
     const dustDrift = [
       { x: -26, y: -5 },
       { x: -10, y: -12 },
@@ -179,6 +182,13 @@ export default function CairnDetail() {
     return () => window.clearTimeout(timeout);
   }, [clearDustAnimations, clearStoneAnimations, clearing, id]);
 
+  async function copyCoordinates() {
+    if (!cairn) return;
+
+    await Clipboard.setStringAsync(formatCoordinates(cairn));
+    Alert.alert('Coordinates copied', formatCoordinates(cairn));
+  }
+
   function confirmDelete() {
     if (!id) return;
     Alert.alert('Delete this Cairn?', 'This action cannot be undone.', [
@@ -198,6 +208,54 @@ export default function CairnDetail() {
     await setCairnFavorite(cairn.id, next);
   }
 
+  function openMenu() {
+    Alert.alert(cairn?.name ?? 'Cairn', undefined, [
+      { text: 'Edit Cairn', onPress: () => router.push(`/cairn/${id}/edit`) },
+      { text: 'Delete Cairn', style: 'destructive', onPress: confirmDelete },
+      { text: 'Cancel', style: 'cancel' },
+    ]);
+  }
+
+  function renderVisit(visit: VisitLog, isLast: boolean) {
+    return (
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={`Edit visit from ${formatDate(visit.visitDate)}`}
+        key={visit.id}
+        onPress={() => router.push(`/cairn/${id}/visit/${visit.id}/edit`)}
+        style={({ pressed }) => [styles.visitRow, pressed && styles.pressed]}
+      >
+        <View style={styles.timeline}>
+          <View style={styles.timelineDot} />
+          {!isLast ? <View style={styles.timelineLine} /> : null}
+        </View>
+        <View style={styles.visitBody}>
+          <Text style={styles.visitDate}>{formatDate(visit.visitDate)}</Text>
+          <Text style={styles.visitNotes}>{previewText(visit.notes)}</Text>
+          {visit.photos.length > 0 ? (
+            <View style={styles.visitPhotos}>
+              {visit.photos.slice(0, 3).map((photo) => {
+                const photoIndex = cairn?.photos.findIndex((item) => item.id === photo.id) ?? -1;
+
+                return (
+                  <Pressable
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel="View visit photo"
+                    key={photo.id}
+                    onPress={() => photoIndex >= 0 && setViewingPhotoIndex(photoIndex)}
+                  >
+                    <Image source={{ uri: photo.localUri }} style={styles.visitThumb} />
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
+        </View>
+        <Feather name="chevron-right" size={22} color={colors.muted} />
+      </Pressable>
+    );
+  }
+
   if (!cairn) {
     return (
       <View style={styles.center}>
@@ -210,151 +268,244 @@ export default function CairnDetail() {
   const primaryPhotoIndex = primaryPhoto
     ? Math.max(cairn.photos.findIndex((photo) => photo.id === primaryPhoto.id), 0)
     : 0;
+  const visibleVisits = showAllVisits ? cairn.visitLogs : cairn.visitLogs.slice(0, 3);
 
   return (
-    <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: '' }} />
-      {primaryPhoto ? (
-        <Pressable
-          accessibilityRole="imagebutton"
-          accessibilityLabel="View hero photo"
-          onPress={() => setViewingPhotoIndex(primaryPhotoIndex)}
-        >
-          <Image source={{ uri: primaryPhoto.localUri }} resizeMode="cover" style={styles.hero} />
-        </Pressable>
-      ) : (
-        <View style={styles.placeholder}>
-          <Text style={styles.placeholderText}>A place worth returning to.</Text>
+    <View style={styles.screen}>
+      <Stack.Screen options={{ headerShown: false }} />
+      <ScrollView contentContainerStyle={styles.content}>
+        <View style={styles.heroWrap}>
+          {primaryPhoto ? (
+            <Pressable
+              accessibilityRole="imagebutton"
+              accessibilityLabel="View hero photo"
+              onPress={() => setViewingPhotoIndex(primaryPhotoIndex)}
+            >
+              <Image source={{ uri: primaryPhoto.localUri }} resizeMode="cover" style={styles.hero} />
+            </Pressable>
+          ) : (
+            <View style={styles.placeholder}>
+              <Text style={styles.placeholderText}>A place worth returning to.</Text>
+            </View>
+          )}
+          <View pointerEvents="box-none" style={[styles.heroControls, { paddingTop: insets.top + spacing.sm }]}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back"
+              onPress={() => router.back()}
+              style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
+            >
+              <Feather name="arrow-left" size={24} color={colors.ink} />
+            </Pressable>
+            <View style={styles.heroRight}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Edit photos"
+                onPress={() => router.push(`/cairn/${id}/edit`)}
+                style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
+              >
+                <Feather name="image" size={21} color={colors.ink} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="More actions"
+                onPress={openMenu}
+                style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
+              >
+                <Feather name="more-horizontal" size={23} color={colors.ink} />
+              </Pressable>
+            </View>
+          </View>
         </View>
-      )}
-      <View style={styles.titleRow}>
-        <View style={styles.titleWrap}>
-          <Text style={styles.title}>{cairn.name}</Text>
-          <Text style={styles.placeType}>{PLACE_TYPE_ICONS[cairn.placeType]} {cairn.placeType}</Text>
-        </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={cairn.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-          onPress={toggleFavorite}
-          style={styles.favoriteButton}
-        >
-          <MaterialIcons
-            name={cairn.isFavorite ? 'star' : 'star-border'}
-            size={30}
-            color={cairn.isFavorite ? colors.clay : colors.muted}
-          />
-        </Pressable>
-      </View>
-      <View style={styles.quickDetails}>
-        <Text style={styles.sectionTitle}>Quick Details</Text>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailIcon}>📍</Text>
-          <View style={styles.detailText}>
-            <Text style={styles.detailLabel}>Location</Text>
-            <Text style={styles.detailValue}>Saved coordinates</Text>
+
+        <View style={styles.body}>
+          <View style={styles.titleRow}>
+            <View style={styles.titleWrap}>
+              <Text style={styles.title}>{cairn.name}</Text>
+              <Text style={styles.placeType}>{PLACE_TYPE_ICONS[cairn.placeType]} {cairn.placeType}</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={cairn.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              onPress={toggleFavorite}
+              style={({ pressed }) => [styles.favoriteButton, pressed && styles.pressed]}
+            >
+              <MaterialIcons
+                name={cairn.isFavorite ? 'star' : 'star-border'}
+                size={30}
+                color={cairn.isFavorite ? colors.clay : colors.muted}
+              />
+              <Text style={styles.favoriteText}>Favorite</Text>
+            </Pressable>
+          </View>
+
+          <View style={styles.quickDetails}>
+            <View style={styles.quickItem}>
+              <Feather name="calendar" size={19} color={colors.moss} />
+              <Text style={styles.detailLabel}>Built</Text>
+              <Text style={styles.detailValue}>{formatDate(cairn.createdAt)}</Text>
+            </View>
+            <View style={styles.quickItem}>
+              <Feather name="compass" size={19} color={colors.moss} />
+              <Text style={styles.detailLabel}>Last Visited</Text>
+              <Text style={styles.detailValue}>{formatDate(cairn.lastVisitedAt)}</Text>
+            </View>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Copy saved coordinates"
               onPress={copyCoordinates}
-              style={({ pressed }) => [styles.coordinateCopyButton, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.quickItem, pressed && styles.pressed]}
             >
-              <Text style={styles.coordinateText}>{formatCoordinates(cairn)}</Text>
-              <Feather name="copy" size={14} color={colors.moss} />
+              <Feather name="map-pin" size={19} color={colors.moss} />
+              <Text style={styles.detailLabel}>Coordinates</Text>
+              <View style={styles.coordinateCopyRow}>
+                <Text style={styles.coordinateText}>{formatCoordinates(cairn)}</Text>
+                <Feather name="copy" size={13} color={colors.moss} />
+              </View>
             </Pressable>
           </View>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailIcon}>🗓</Text>
-          <View style={styles.detailText}>
-            <Text style={styles.detailLabel}>Built</Text>
-            <Text style={styles.detailValue}>{formatDate(cairn.createdAt)}</Text>
-          </View>
-        </View>
-        <View style={styles.detailRow}>
-          <Text style={styles.detailIcon}>🧭</Text>
-          <View style={styles.detailText}>
-            <Text style={styles.detailLabel}>Last Visited</Text>
-            <Text style={styles.detailValue}>{formatDate(cairn.lastVisitedAt)}</Text>
-          </View>
-        </View>
-      </View>
-      <View style={styles.storyBlock}>
-        <Text style={styles.sectionTitle}>Story</Text>
-        <View style={styles.storyCard}>
-          <View style={styles.storyRail} />
-          <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.storyMark}>
-            <View style={styles.storyStone0} />
-            <View style={styles.storyStone1} />
-            <View style={styles.storyStone2} />
-          </View>
-          <Text style={styles.storyText}>{cairn.story || 'No story yet.'}</Text>
-        </View>
-      </View>
-      {cairn.tags.length > 0 ? (
-        <View style={styles.tagsBlock}>
-          <Text style={styles.sectionTitle}>Tags</Text>
-          <View style={styles.tagList}>
-            {cairn.tags.map((tag) => (
-              <View key={tag} style={styles.tagChip}>
-                <Text style={styles.tagChipText}>{tag}</Text>
+
+          {cairn.tags.length > 0 ? (
+            <View style={styles.tagsBlock}>
+              {cairn.tags.map((tag) => (
+                <View key={tag} style={styles.tagChip}>
+                  <Text style={styles.tagChipText}>{tag}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
+
+          <View style={styles.storyCard}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIcon}>
+                <Feather name="book-open" size={17} color={colors.moss} />
               </View>
-            ))}
+              <Text style={styles.sectionTitle}>Story</Text>
+            </View>
+            <Text style={styles.storyText}>{cairn.story || 'No story yet.'}</Text>
           </View>
-        </View>
-      ) : null}
-      <View style={styles.notesBlock}>
-        <Text style={styles.sectionTitle}>Notes</Text>
-        {cairn.notes ? (
-          <View style={styles.notesFormatted}>
-            {formattedNoteLines(cairn.notes).map((line) => {
-              if (line.type === 'space') {
-                return <View key={line.id} style={styles.noteSpacer} />;
-              }
 
-              if (line.type === 'bullet') {
-                return (
-                  <View key={line.id} style={styles.noteBulletRow}>
-                    <Text style={styles.noteBullet}>•</Text>
-                    <Text style={styles.notesText}>{line.text}</Text>
-                  </View>
-                );
-              }
-
-              return <Text key={line.id} style={styles.notesText}>{line.text}</Text>;
-            })}
-          </View>
-        ) : (
-          <Text style={styles.notesText}>No notes yet.</Text>
-        )}
-      </View>
-      {cairn.photos.length > 1 ? (
-        <View style={styles.photoGrid}>
-          {cairn.photos
-            .map((photo, index) => ({ photo, index }))
-            .filter(({ photo }) => photo.id !== primaryPhoto?.id)
-            .map(({ photo, index }) => (
+          <View style={styles.card}>
+            <View style={styles.sectionHeaderRow}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionIcon}>
+                  <Feather name="clock" size={17} color={colors.moss} />
+                </View>
+                <Text style={styles.sectionTitle}>Visit History</Text>
+              </View>
               <Pressable
-                accessibilityRole="imagebutton"
-                accessibilityLabel="View Cairn photo"
-                key={photo.id}
-                onPress={() => setViewingPhotoIndex(index)}
+                accessibilityRole="button"
+                accessibilityLabel="Log visit"
+                onPress={() => router.push(`/cairn/${id}/visit/new`)}
+                style={({ pressed }) => [styles.logVisitButton, pressed && styles.pressed]}
               >
-                <Image source={{ uri: photo.localUri }} resizeMode="cover" style={styles.thumb} />
+                <Feather name="plus" size={16} color={colors.white} />
+                <Text style={styles.logVisitText}>Log Visit</Text>
               </Pressable>
-            ))}
+            </View>
+            {cairn.visitLogs.length > 0 ? (
+              <View style={styles.visitList}>
+                {visibleVisits.map((visit, index) => renderVisit(visit, index === visibleVisits.length - 1))}
+                {cairn.visitLogs.length > 3 ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    onPress={() => setShowAllVisits((current) => !current)}
+                    style={({ pressed }) => [styles.viewAllVisits, pressed && styles.pressed]}
+                  >
+                    <Text style={styles.viewAllVisitsText}>
+                      {showAllVisits ? 'Show fewer visits' : 'View all visits'}
+                    </Text>
+                    <Feather name={showAllVisits ? 'chevron-up' : 'chevron-right'} size={18} color={colors.moss} />
+                  </Pressable>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.emptyVisits}>
+                <Text style={styles.emptyTitle}>No visits have been logged yet.</Text>
+                <Text style={styles.emptyText}>Log your first visit to start building this place&apos;s history.</Text>
+                <Button label="Log Visit" onPress={() => router.push(`/cairn/${id}/visit/new`)} />
+              </View>
+            )}
+          </View>
+
+          <View style={styles.card}>
+            <View style={styles.sectionHeader}>
+              <View style={styles.sectionIcon}>
+                <Feather name="clipboard" size={17} color={colors.moss} />
+              </View>
+              <Text style={styles.sectionTitle}>Reference Notes</Text>
+            </View>
+            {cairn.notes ? (
+              <View style={styles.notesFormatted}>
+                {formattedNoteLines(cairn.notes).map((line) => {
+                  if (line.type === 'space') {
+                    return <View key={line.id} style={styles.noteSpacer} />;
+                  }
+
+                  if (line.type === 'bullet') {
+                    return (
+                      <View key={line.id} style={styles.noteBulletRow}>
+                        <Text style={styles.noteBullet}>•</Text>
+                        <Text style={styles.notesText}>{line.text}</Text>
+                      </View>
+                    );
+                  }
+
+                  return <Text key={line.id} style={styles.notesText}>{line.text}</Text>;
+                })}
+              </View>
+            ) : (
+              <Text style={styles.notesText}>No reference notes yet.</Text>
+            )}
+          </View>
+
+          {cairn.photos.length > 0 ? (
+            <View style={styles.card}>
+              <View style={styles.sectionHeaderRow}>
+                <View style={styles.sectionHeader}>
+                  <View style={styles.sectionIcon}>
+                    <Feather name="image" size={17} color={colors.moss} />
+                  </View>
+                  <Text style={styles.sectionTitle}>Photos</Text>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="View all photos"
+                  onPress={() => setViewingPhotoIndex(0)}
+                  style={({ pressed }) => [styles.textButton, pressed && styles.pressed]}
+                >
+                  <Text style={styles.textButtonLabel}>View All</Text>
+                </Pressable>
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photoStrip}>
+                {cairn.photos.slice(0, 8).map((photo, index) => (
+                  <Pressable
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel="View Cairn photo"
+                    key={photo.id}
+                    onPress={() => setViewingPhotoIndex(index)}
+                  >
+                    <Image source={{ uri: photo.localUri }} resizeMode="cover" style={styles.thumb} />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+
+          <View style={styles.actions}>
+            <Pressable accessibilityRole="button" onPress={() => router.push(`/cairn/${id}/edit`)} style={styles.iconButton}>
+              <Feather name="edit-3" size={20} color={colors.ink} />
+              <Text style={styles.actionLabel}>Edit</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={confirmDelete} style={styles.iconButton}>
+              <Feather name="trash-2" size={20} color={colors.danger} />
+              <Text style={[styles.actionLabel, styles.deleteLabel]}>Delete</Text>
+            </Pressable>
+          </View>
+          <Button label="Back to Cairn" variant="secondary" onPress={() => router.replace('/map')} />
         </View>
-      ) : null}
-      <View style={styles.actions}>
-        <Pressable accessibilityRole="button" onPress={() => router.push(`/cairn/${id}/edit`)} style={styles.iconButton}>
-          <Feather name="edit-3" size={20} color={colors.ink} />
-          <Text style={styles.actionLabel}>Edit</Text>
-        </Pressable>
-        <Pressable accessibilityRole="button" onPress={confirmDelete} style={styles.iconButton}>
-          <Feather name="trash-2" size={20} color={colors.danger} />
-          <Text style={[styles.actionLabel, styles.deleteLabel]}>Delete</Text>
-        </Pressable>
-      </View>
-      <Button label="Back to Cairn" variant="secondary" onPress={() => router.replace('/map')} />
+      </ScrollView>
+
       <Modal
         animationType="fade"
         transparent
@@ -431,7 +582,7 @@ export default function CairnDetail() {
           </View>
         </View>
       </Modal>
-    </ScrollView>
+    </View>
   );
 }
 
@@ -441,8 +592,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cream,
   },
   content: {
-    padding: spacing.md,
-    gap: spacing.md,
+    paddingBottom: spacing.xl,
   },
   center: {
     flex: 1,
@@ -450,195 +600,283 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     backgroundColor: colors.cream,
   },
+  muted: {
+    color: colors.muted,
+  },
   pressed: {
     opacity: 0.72,
   },
+  heroWrap: {
+    height: 330,
+    backgroundColor: colors.pine,
+  },
   hero: {
-    height: 230,
-    borderRadius: 8,
+    width: '100%',
+    height: '100%',
     backgroundColor: colors.line,
   },
   placeholder: {
-    height: 230,
-    borderRadius: 8,
-    backgroundColor: colors.pine,
+    flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     padding: spacing.lg,
+    backgroundColor: colors.pine,
   },
   placeholderText: {
     color: colors.white,
     fontSize: type.heading,
-    fontWeight: '800',
+    fontWeight: '900',
     textAlign: 'center',
+  },
+  heroControls: {
+    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    paddingHorizontal: spacing.md,
+  },
+  heroRight: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  heroButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(255, 253, 250, 0.9)',
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
+  },
+  body: {
+    padding: spacing.md,
+    gap: spacing.md,
   },
   titleRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: spacing.md,
   },
   titleWrap: {
     flex: 1,
+    minWidth: 0,
   },
   title: {
     color: colors.ink,
     fontSize: type.title,
     fontWeight: '900',
   },
+  placeType: {
+    color: colors.moss,
+    fontWeight: '900',
+    marginTop: spacing.xs,
+  },
   favoriteButton: {
-    width: 44,
-    height: 44,
+    minWidth: 72,
+    minHeight: 48,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  placeType: {
-    color: colors.moss,
-    fontWeight: '800',
-    marginTop: spacing.xs,
-  },
-  muted: {
+  favoriteText: {
     color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: -3,
   },
   quickDetails: {
-    backgroundColor: colors.paper,
-    borderWidth: 1,
-    borderColor: colors.line,
-    borderRadius: 8,
-    padding: spacing.md,
-    gap: spacing.sm,
-  },
-  sectionTitle: {
-    color: colors.ink,
-    fontWeight: '900',
-  },
-  detailRow: {
     flexDirection: 'row',
     gap: spacing.sm,
   },
-  detailIcon: {
-    width: 24,
-    fontSize: 17,
-  },
-  detailText: {
+  quickItem: {
     flex: 1,
+    minHeight: 92,
     minWidth: 0,
+    justifyContent: 'center',
+    gap: 3,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.sm,
   },
   detailLabel: {
     color: colors.muted,
-    fontSize: type.small,
-    fontWeight: '800',
+    fontSize: 11,
+    fontWeight: '900',
     textTransform: 'uppercase',
   },
   detailValue: {
     color: colors.ink,
-    marginTop: 2,
-  },
-  coordinateCopyButton: {
-    minHeight: 30,
-    flexDirection: 'row',
-    alignItems: 'center',
-    alignSelf: 'flex-start',
-    gap: spacing.xs,
-    borderRadius: 8,
-    paddingRight: spacing.sm,
-    marginTop: 2,
+    fontSize: type.small,
+    fontWeight: '700',
   },
   coordinateText: {
+    flexShrink: 1,
     color: colors.muted,
-    fontSize: type.small,
+    fontSize: 11,
+    fontWeight: '700',
   },
-  storyBlock: {
-    gap: spacing.sm,
+  coordinateCopyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  tagsBlock: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  tagChip: {
+    minHeight: 28,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.13)',
+    backgroundColor: 'rgba(203, 216, 198, 0.38)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 3,
+  },
+  tagChipText: {
+    color: colors.ink,
+    fontSize: type.small,
+    fontWeight: '800',
+    includeFontPadding: false,
+  },
+  card: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.paper,
+    padding: spacing.md,
+    gap: spacing.md,
   },
   storyCard: {
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(49, 86, 66, 0.14)',
-    backgroundColor: 'rgba(250, 248, 243, 0.82)',
+    backgroundColor: 'rgba(203, 216, 198, 0.28)',
     padding: spacing.md,
-    paddingLeft: spacing.lg,
-    gap: spacing.sm,
-    overflow: 'hidden',
+    gap: spacing.md,
   },
-  storyRail: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 5,
-    backgroundColor: colors.sage,
-  },
-  storyMark: {
-    width: 34,
-    height: 24,
+  sectionHeader: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'flex-end',
+    gap: spacing.sm,
   },
-  storyStone0: {
-    width: 8,
-    height: 5,
-    borderRadius: 6,
-    backgroundColor: colors.moss,
-    marginBottom: 2,
-    transform: [{ rotate: '-7deg' }, { translateX: 1 }],
+  sectionHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
   },
-  storyStone1: {
-    width: 17,
-    height: 6,
-    borderRadius: 9,
-    backgroundColor: colors.moss,
-    marginBottom: 2,
-    transform: [{ rotate: '4deg' }, { translateX: -1 }],
+  sectionIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(203, 216, 198, 0.6)',
   },
-  storyStone2: {
-    width: 30,
-    height: 7,
-    borderRadius: 12,
-    backgroundColor: colors.pine,
-    transform: [{ rotate: '-2deg' }],
+  sectionTitle: {
+    color: colors.ink,
+    fontSize: type.heading,
+    fontWeight: '900',
   },
   storyText: {
     color: colors.ink,
-    fontSize: 17,
-    lineHeight: 27,
+    fontSize: 18,
+    lineHeight: 29,
     fontWeight: '600',
   },
-  tagsBlock: {
-    gap: spacing.xs,
-    marginBottom: spacing.xs,
-  },
-  tagList: {
+  logVisitButton: {
+    minHeight: 38,
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    columnGap: spacing.xs,
-    rowGap: 6,
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: 8,
+    backgroundColor: colors.moss,
+    paddingHorizontal: spacing.sm,
   },
-  tagChip: {
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: 'rgba(49, 86, 66, 0.13)',
-    backgroundColor: 'rgba(203, 216, 198, 0.38)',
-    minHeight: 24,
+  logVisitText: {
+    color: colors.white,
+    fontSize: type.small,
+    fontWeight: '900',
+  },
+  visitList: {
+    gap: spacing.sm,
+  },
+  visitRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.sm,
+    minHeight: 88,
+  },
+  timeline: {
+    width: 16,
+    alignItems: 'center',
+  },
+  timelineDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 7,
+    backgroundColor: colors.moss,
+  },
+  timelineLine: {
+    flex: 1,
+    width: 2,
+    marginTop: 4,
+    backgroundColor: 'rgba(49, 86, 66, 0.18)',
+  },
+  visitBody: {
+    flex: 1,
+    minWidth: 0,
+    paddingBottom: spacing.sm,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(49, 86, 66, 0.1)',
+  },
+  visitDate: {
+    color: colors.ink,
+    fontWeight: '900',
+  },
+  visitNotes: {
+    color: colors.muted,
+    lineHeight: 21,
+    marginTop: 3,
+  },
+  visitPhotos: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+    marginTop: spacing.sm,
+  },
+  visitThumb: {
+    width: 54,
+    height: 54,
+    borderRadius: 8,
+  },
+  viewAllVisits: {
+    minHeight: 42,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingHorizontal: 9,
-    paddingVertical: 2,
+    gap: spacing.xs,
   },
-  tagChipText: {
-    color: colors.ink,
-    fontSize: 12,
-    lineHeight: 14,
-    fontWeight: '700',
-    includeFontPadding: false,
+  viewAllVisitsText: {
+    color: colors.moss,
+    fontWeight: '900',
   },
-  notesBlock: {
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.paper,
-    padding: spacing.md,
+  emptyVisits: {
     gap: spacing.sm,
+  },
+  emptyTitle: {
+    color: colors.ink,
+    fontWeight: '900',
+  },
+  emptyText: {
+    color: colors.muted,
+    lineHeight: 22,
   },
   notesFormatted: {
     gap: 7,
@@ -665,15 +903,44 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     lineHeight: 24,
   },
-  photoGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  textButton: {
+    minHeight: 36,
+    justifyContent: 'center',
+  },
+  textButtonLabel: {
+    color: colors.moss,
+    fontWeight: '900',
+  },
+  photoStrip: {
     gap: spacing.sm,
   },
   thumb: {
     width: 104,
     height: 104,
     borderRadius: 8,
+  },
+  actions: {
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  iconButton: {
+    minHeight: 52,
+    flex: 1,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    backgroundColor: colors.white,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: spacing.sm,
+  },
+  actionLabel: {
+    color: colors.ink,
+    fontWeight: '800',
+  },
+  deleteLabel: {
+    color: colors.danger,
   },
   photoViewer: {
     flex: 1,
@@ -774,28 +1041,5 @@ const styles = StyleSheet.create({
     fontSize: type.heading,
     fontWeight: '900',
     textAlign: 'center',
-  },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  iconButton: {
-    minHeight: 52,
-    flex: 1,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  actionLabel: {
-    color: colors.ink,
-    fontWeight: '800',
-  },
-  deleteLabel: {
-    color: colors.danger,
   },
 });

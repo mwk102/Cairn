@@ -27,8 +27,19 @@ export const PLACE_TYPE_ICONS: Record<PlaceType, string> = {
 export type CairnPhoto = {
   id: string;
   cairnId: string;
+  visitLogId: string | null;
   localUri: string;
   createdAt: string;
+};
+
+export type VisitLog = {
+  id: string;
+  cairnId: string;
+  visitDate: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+  photos: CairnPhoto[];
 };
 
 export type Cairn = {
@@ -46,6 +57,7 @@ export type Cairn = {
   lastVisitedAt: string;
   primaryPhotoId: string | null;
   photos: CairnPhoto[];
+  visitLogs: VisitLog[];
 };
 
 export type CairnInput = {
@@ -57,8 +69,13 @@ export type CairnInput = {
   placeType: PlaceType;
   tags: string[];
   isFavorite: boolean;
-  lastVisitedAt?: string;
   primaryPhotoId?: string | null;
   primaryPhotoUri?: string | null;
+  photos: string[];
+};
+
+export type VisitLogInput = {
+  visitDate: string;
+  notes: string;
   photos: string[];
 };
