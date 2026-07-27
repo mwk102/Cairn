@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Animated,
   Easing,
   FlatList,
@@ -17,9 +18,11 @@ import MapView, { Circle, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { router, useFocusEffect } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 
 import { Button } from '@/components/Button';
 import { CairnMarker } from '@/components/CairnMarker';
+import { createCairnMigrationJson, importCairnsFromMigrationJson } from '@/data/cairns';
 import { useCairns } from '@/hooks/useCairns';
 import { useCurrentLocation } from '@/hooks/useCurrentLocation';
 import { colors, spacing, type } from '@/theme';
@@ -83,6 +86,7 @@ export default function MapHome() {
   const [selectedCairnId, setSelectedCairnId] = useState<string | null>(null);
   const [rippleRadius, setRippleRadius] = useState(0);
   const [rippleOpacity, setRippleOpacity] = useState(0);
+  const [migrationBusy, setMigrationBusy] = useState(false);
   const { cairns, loading, error, reload } = useCairns();
   const { coordinate, permissionDenied, requestLocation } = useCurrentLocation();
   const mapAvailable = canUseNativeMap();
@@ -265,6 +269,43 @@ export default function MapHome() {
 
   async function navigateToCairn(cairn: Cairn) {
     await Linking.openURL(googleMapsDirectionsUrl(cairn));
+  }
+
+  async function copyCairnExport() {
+    if (migrationBusy) return;
+    setMigrationBusy(true);
+    try {
+      await Clipboard.setStringAsync(createCairnMigrationJson(cairns));
+      Alert.alert(
+        'Cairns copied',
+        `Copied ${cairns.length} ${cairns.length === 1 ? 'Cairn' : 'Cairns'} to the clipboard. Photos are not included.`,
+      );
+    } catch {
+      Alert.alert('Export failed', 'Cairn could not copy the export to the clipboard.');
+    } finally {
+      setMigrationBusy(false);
+    }
+  }
+
+  async function pasteCairnImport() {
+    if (migrationBusy) return;
+    setMigrationBusy(true);
+    try {
+      const text = await Clipboard.getStringAsync();
+      const importedCount = await importCairnsFromMigrationJson(text);
+      await reload();
+      Alert.alert(
+        'Cairns imported',
+        `Imported ${importedCount} ${importedCount === 1 ? 'Cairn' : 'Cairns'}. Photos can be re-added from this app.`,
+      );
+    } catch (importError) {
+      Alert.alert(
+        'Import failed',
+        importError instanceof Error ? importError.message : 'Cairn could not read a valid export from the clipboard.',
+      );
+    } finally {
+      setMigrationBusy(false);
+    }
   }
 
   function startBuildCairn() {
@@ -661,6 +702,42 @@ export default function MapHome() {
               <Text style={[styles.filterLabel, menuFilter === 'favorites' && styles.filterLabelSelected]}>Favorites</Text>
             </Pressable>
           </View>
+          <View style={styles.migrationBox}>
+            <View style={styles.migrationText}>
+              <Text style={styles.migrationTitle}>Move local Cairns</Text>
+              <Text style={styles.migrationHelp}>Copy in Expo Go, paste in the APK.</Text>
+            </View>
+            <View style={styles.migrationActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Copy Cairn export"
+                disabled={migrationBusy || cairns.length === 0}
+                onPress={copyCairnExport}
+                style={({ pressed }) => [
+                  styles.migrationButton,
+                  (pressed || migrationBusy) && styles.pressed,
+                  cairns.length === 0 && styles.disabledButton,
+                ]}
+              >
+                <Feather name="copy" size={15} color={colors.moss} />
+                <Text style={styles.migrationButtonText}>Copy</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Paste Cairn import"
+                disabled={migrationBusy}
+                onPress={pasteCairnImport}
+                style={({ pressed }) => [
+                  styles.migrationButton,
+                  styles.migrationButtonPrimary,
+                  (pressed || migrationBusy) && styles.pressed,
+                ]}
+              >
+                <Feather name="clipboard" size={15} color={colors.white} />
+                <Text style={styles.migrationButtonPrimaryText}>Paste</Text>
+              </Pressable>
+            </View>
+          </View>
           {cairns.length === 0 ? (
             <View style={styles.menuEmpty}>
               <Text style={styles.panelTitle}>No Cairns yet.</Text>
@@ -939,11 +1016,11 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 6,
     borderBottomRightRadius: 4,
     backgroundColor: colors.white,
-    marginBottom: 2,
+    marginBottom: 1,
     transform: [{ rotate: '-7deg' }, { translateX: 1 }],
   },
   buildStone1: {
-    width: 16,
+    width: 14,
     height: 5,
     borderTopLeftRadius: 7,
     borderTopRightRadius: 5,
@@ -954,19 +1031,19 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '5deg' }, { translateX: -1 }],
   },
   buildStone2: {
-    width: 25,
-    height: 7,
+    width: 23,
+    height: 6,
     borderTopLeftRadius: 8,
     borderTopRightRadius: 11,
     borderBottomLeftRadius: 6,
     borderBottomRightRadius: 8,
     backgroundColor: colors.white,
-    marginBottom: 2,
+    marginBottom: 1,
     transform: [{ rotate: '-3deg' }, { translateX: 1 }],
   },
   buildStone3: {
-    width: 34,
-    height: 8,
+    width: 31,
+    height: 7,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 8,
     borderBottomLeftRadius: 9,
@@ -1263,6 +1340,65 @@ const styles = StyleSheet.create({
   },
   filterLabelSelected: {
     color: colors.ink,
+  },
+  migrationBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
+    backgroundColor: 'rgba(203, 216, 198, 0.28)',
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  migrationText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  migrationTitle: {
+    color: colors.ink,
+    fontSize: type.small,
+    fontWeight: '900',
+  },
+  migrationHelp: {
+    color: colors.muted,
+    fontSize: 12,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  migrationActions: {
+    flexDirection: 'row',
+    gap: spacing.xs,
+  },
+  migrationButton: {
+    minHeight: 36,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 5,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.18)',
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.sm,
+  },
+  migrationButtonPrimary: {
+    backgroundColor: colors.moss,
+    borderColor: colors.moss,
+  },
+  migrationButtonText: {
+    color: colors.moss,
+    fontSize: type.small,
+    fontWeight: '900',
+  },
+  migrationButtonPrimaryText: {
+    color: colors.white,
+    fontSize: type.small,
+    fontWeight: '900',
+  },
+  disabledButton: {
+    opacity: 0.45,
   },
   menuTitle: {
     color: colors.ink,

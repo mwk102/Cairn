@@ -1,6 +1,6 @@
 import * as Crypto from 'expo-crypto';
 
-import { Cairn, CairnInput, CairnPhoto, PlaceType } from '@/types/cairn';
+import { Cairn, CairnInput, CairnPhoto, PLACE_TYPES, PlaceType } from '@/types/cairn';
 import { getDb, initDb } from './db';
 
 type CairnRow = Omit<Cairn, 'isFavorite' | 'photos' | 'placeType' | 'tags'> & {
@@ -8,6 +8,30 @@ type CairnRow = Omit<Cairn, 'isFavorite' | 'photos' | 'placeType' | 'tags'> & {
   placeType: string;
   tags: string;
 };
+
+type CairnMigrationEntry = {
+  id?: unknown;
+  name?: unknown;
+  story?: unknown;
+  notes?: unknown;
+  latitude?: unknown;
+  longitude?: unknown;
+  placeType?: unknown;
+  tags?: unknown;
+  isFavorite?: unknown;
+  createdAt?: unknown;
+  updatedAt?: unknown;
+  lastVisitedAt?: unknown;
+};
+
+type CairnMigrationPayload = {
+  type?: unknown;
+  version?: unknown;
+  exportedAt?: unknown;
+  cairns?: unknown;
+};
+
+const PLACE_TYPE_SET = new Set<string>(PLACE_TYPES);
 
 function normalizeTags(tags: string[]) {
   return Array.from(
@@ -27,6 +51,44 @@ function parseTags(value: string) {
   } catch {
     return [];
   }
+}
+
+function cleanMigrationTags(value: unknown) {
+  if (!Array.isArray(value)) return [];
+  return normalizeTags(value.filter((tag): tag is string => typeof tag === 'string'));
+}
+
+function cleanMigrationDate(value: unknown, fallback: string) {
+  if (typeof value !== 'string') return fallback;
+  const timestamp = Date.parse(value);
+  return Number.isFinite(timestamp) ? new Date(timestamp).toISOString() : fallback;
+}
+
+function cleanMigrationEntry(entry: CairnMigrationEntry, now: string) {
+  const latitude = Number(entry.latitude);
+  const longitude = Number(entry.longitude);
+  const name = typeof entry.name === 'string' ? entry.name.trim() : '';
+
+  if (!name || !Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    return null;
+  }
+
+  return {
+    id: typeof entry.id === 'string' && entry.id.trim() ? entry.id : Crypto.randomUUID(),
+    name,
+    story: typeof entry.story === 'string' ? entry.story.trim() : '',
+    notes: typeof entry.notes === 'string' ? entry.notes.trim() : '',
+    latitude,
+    longitude,
+    placeType: typeof entry.placeType === 'string' && PLACE_TYPE_SET.has(entry.placeType)
+      ? entry.placeType
+      : 'Other',
+    tags: JSON.stringify(cleanMigrationTags(entry.tags)),
+    isFavorite: entry.isFavorite === true ? 1 : 0,
+    createdAt: cleanMigrationDate(entry.createdAt, now),
+    updatedAt: now,
+    lastVisitedAt: cleanMigrationDate(entry.lastVisitedAt, now),
+  };
 }
 
 function mapCairn(row: CairnRow, photos: CairnPhoto[]): Cairn {
@@ -203,4 +265,86 @@ export async function setCairnPrimaryPhoto(id: string, primaryPhotoId: string) {
     new Date().toISOString(),
     id,
   );
+}
+
+export function createCairnMigrationJson(cairns: Cairn[]) {
+  return JSON.stringify({
+    type: 'cairn-migration',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    cairns: cairns.map((cairn) => ({
+      id: cairn.id,
+      name: cairn.name,
+      story: cairn.story,
+      notes: cairn.notes,
+      latitude: cairn.latitude,
+      longitude: cairn.longitude,
+      placeType: cairn.placeType,
+      tags: cairn.tags,
+      isFavorite: cairn.isFavorite,
+      createdAt: cairn.createdAt,
+      updatedAt: cairn.updatedAt,
+      lastVisitedAt: cairn.lastVisitedAt,
+    })),
+  });
+}
+
+export async function importCairnsFromMigrationJson(json: string) {
+  let payload: CairnMigrationPayload;
+
+  try {
+    payload = JSON.parse(json) as CairnMigrationPayload;
+  } catch {
+    throw new Error('That clipboard text is not a Cairn export.');
+  }
+
+  if (payload.type !== 'cairn-migration' || !Array.isArray(payload.cairns)) {
+    throw new Error('That clipboard text is not a Cairn export.');
+  }
+
+  await initDb();
+  const db = await getDb();
+  const now = new Date().toISOString();
+  const entries = payload.cairns
+    .map((entry) => cleanMigrationEntry(entry as CairnMigrationEntry, now))
+    .filter((entry): entry is NonNullable<typeof entry> => entry !== null);
+
+  if (entries.length === 0) {
+    throw new Error('No valid Cairns were found in that export.');
+  }
+
+  await db.withTransactionAsync(async () => {
+    for (const entry of entries) {
+      await db.runAsync(
+        `INSERT INTO cairns
+        (id, name, story, notes, latitude, longitude, placeType, tags, isFavorite, primaryPhotoId, createdAt, updatedAt, lastVisitedAt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?)
+        ON CONFLICT(id) DO UPDATE SET
+          name = excluded.name,
+          story = excluded.story,
+          notes = excluded.notes,
+          latitude = excluded.latitude,
+          longitude = excluded.longitude,
+          placeType = excluded.placeType,
+          tags = excluded.tags,
+          isFavorite = excluded.isFavorite,
+          updatedAt = excluded.updatedAt,
+          lastVisitedAt = excluded.lastVisitedAt`,
+        entry.id,
+        entry.name,
+        entry.story,
+        entry.notes,
+        entry.latitude,
+        entry.longitude,
+        entry.placeType,
+        entry.tags,
+        entry.isFavorite,
+        entry.createdAt,
+        entry.updatedAt,
+        entry.lastVisitedAt,
+      );
+    }
+  });
+
+  return entries.length;
 }
