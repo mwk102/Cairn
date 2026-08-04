@@ -199,8 +199,8 @@ export async function createCairn(input: CairnInput) {
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `INSERT INTO cairns
-      (id, name, story, notes, latitude, longitude, placeType, tags, isFavorite, primaryPhotoId, createdAt, updatedAt, lastVisitedAt)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      (id, name, story, notes, latitude, longitude, placeType, tags, isFavorite, primaryPhotoId, sharedByName, sharedById, sharedAt, createdAt, updatedAt, lastVisitedAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       id,
       input.name.trim(),
       input.story.trim(),
@@ -211,6 +211,9 @@ export async function createCairn(input: CairnInput) {
       tags,
       input.isFavorite ? 1 : 0,
       primaryPhotoId,
+      input.sharedByName?.trim() || null,
+      input.sharedById?.trim() || null,
+      input.sharedAt ?? null,
       now,
       now,
       now,
@@ -245,12 +248,15 @@ export async function updateCairn(id: string, input: CairnInput) {
       ? input.primaryPhotoId
       : photoIds[0] ?? null;
   const tags = JSON.stringify(normalizeTags(input.tags));
+  const sharedByName = input.sharedByName?.trim() || previous?.sharedByName || null;
+  const sharedById = input.sharedById?.trim() || previous?.sharedById || null;
+  const sharedAt = input.sharedAt ?? previous?.sharedAt ?? null;
 
   await db.withTransactionAsync(async () => {
     await db.runAsync(
       `UPDATE cairns SET
         name = ?, story = ?, notes = ?, latitude = ?, longitude = ?, placeType = ?, tags = ?,
-        isFavorite = ?, primaryPhotoId = ?, updatedAt = ?
+        isFavorite = ?, primaryPhotoId = ?, sharedByName = ?, sharedById = ?, sharedAt = ?, updatedAt = ?
       WHERE id = ?`,
       input.name.trim(),
       input.story.trim(),
@@ -261,6 +267,9 @@ export async function updateCairn(id: string, input: CairnInput) {
       tags,
       input.isFavorite ? 1 : 0,
       primaryPhotoId,
+      sharedByName,
+      sharedById,
+      sharedAt,
       now,
       id,
     );

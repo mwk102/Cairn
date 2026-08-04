@@ -56,6 +56,9 @@ export type Cairn = {
   updatedAt: string;
   lastVisitedAt: string;
   primaryPhotoId: string | null;
+  sharedByName: string | null;
+  sharedById: string | null;
+  sharedAt: string | null;
   photos: CairnPhoto[];
   visitLogs: VisitLog[];
 };
@@ -71,6 +74,9 @@ export type CairnInput = {
   isFavorite: boolean;
   primaryPhotoId?: string | null;
   primaryPhotoUri?: string | null;
+  sharedByName?: string | null;
+  sharedById?: string | null;
+  sharedAt?: string | null;
   photos: string[];
 };
 

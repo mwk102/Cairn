@@ -30,6 +30,9 @@ export async function initDb() {
       tags TEXT NOT NULL DEFAULT '[]',
       isFavorite INTEGER NOT NULL,
       primaryPhotoId TEXT,
+      sharedByName TEXT,
+      sharedById TEXT,
+      sharedAt TEXT,
       createdAt TEXT NOT NULL,
       updatedAt TEXT NOT NULL,
       lastVisitedAt TEXT NOT NULL
@@ -64,6 +67,15 @@ export async function initDb() {
   }
   if (!columns.some((column) => column.name === 'tags')) {
     await db.execAsync("ALTER TABLE cairns ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';");
+  }
+  if (!columns.some((column) => column.name === 'sharedByName')) {
+    await db.execAsync('ALTER TABLE cairns ADD COLUMN sharedByName TEXT;');
+  }
+  if (!columns.some((column) => column.name === 'sharedById')) {
+    await db.execAsync('ALTER TABLE cairns ADD COLUMN sharedById TEXT;');
+  }
+  if (!columns.some((column) => column.name === 'sharedAt')) {
+    await db.execAsync('ALTER TABLE cairns ADD COLUMN sharedAt TEXT;');
   }
 
   const photoColumns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(photos)');

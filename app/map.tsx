@@ -736,6 +736,21 @@ export default function MapHome() {
                 <Feather name="clipboard" size={15} color={colors.white} />
                 <Text style={styles.migrationButtonPrimaryText}>Paste</Text>
               </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Receive shared Cairn"
+                onPress={() => {
+                  closePlacesMenu();
+                  router.push('/share/receive');
+                }}
+                style={({ pressed }) => [
+                  styles.migrationButton,
+                  (pressed || migrationBusy) && styles.pressed,
+                ]}
+              >
+                <Feather name="share-2" size={15} color={colors.moss} />
+                <Text style={styles.migrationButtonText}>Receive</Text>
+              </Pressable>
             </View>
           </View>
           {cairns.length === 0 ? (

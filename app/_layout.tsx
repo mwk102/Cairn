@@ -23,8 +23,12 @@ export default function RootLayout() {
           <Stack.Screen name="cairn/build" options={{ title: 'Build Cairn' }} />
           <Stack.Screen name="cairn/[id]" options={{ title: 'Cairn' }} />
           <Stack.Screen name="cairn/[id]/edit" options={{ title: 'Edit Cairn' }} />
+          <Stack.Screen name="cairn/[id]/share/index" options={{ title: 'Share Cairn' }} />
+          <Stack.Screen name="cairn/[id]/share/success" options={{ title: 'Cairn Shared' }} />
           <Stack.Screen name="cairn/[id]/visit/new" options={{ title: 'Log Visit' }} />
           <Stack.Screen name="cairn/[id]/visit/[visitId]/edit" options={{ title: 'Edit Visit' }} />
+          <Stack.Screen name="share/receive/index" options={{ title: 'Receive Cairn' }} />
+          <Stack.Screen name="share/receive/success" options={{ title: 'Cairn Added' }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

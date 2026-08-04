@@ -210,6 +210,7 @@ export default function CairnDetail() {
 
   function openMenu() {
     Alert.alert(cairn?.name ?? 'Cairn', undefined, [
+      { text: 'Share Cairn', onPress: () => router.push(`/cairn/${id}/share`) },
       { text: 'Edit Cairn', onPress: () => router.push(`/cairn/${id}/edit`) },
       { text: 'Delete Cairn', style: 'destructive', onPress: confirmDelete },
       { text: 'Cancel', style: 'cancel' },
@@ -375,6 +376,18 @@ export default function CairnDetail() {
             </View>
           ) : null}
 
+          {cairn.sharedByName ? (
+            <View style={styles.attributionCard}>
+              <Feather name="user" size={18} color={colors.moss} />
+              <View style={styles.attributionText}>
+                <Text style={styles.attributionTitle}>Created by {cairn.sharedByName}</Text>
+                <Text style={styles.attributionMeta}>
+                  Shared with you{cairn.sharedAt ? ` on ${formatDate(cairn.sharedAt)}` : ''}
+                </Text>
+              </View>
+            </View>
+          ) : null}
+
           <View style={styles.storyCard}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionIcon}>
@@ -496,6 +509,10 @@ export default function CairnDetail() {
             <Pressable accessibilityRole="button" onPress={() => router.push(`/cairn/${id}/edit`)} style={styles.iconButton}>
               <Feather name="edit-3" size={20} color={colors.ink} />
               <Text style={styles.actionLabel}>Edit</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => router.push(`/cairn/${id}/share`)} style={styles.iconButton}>
+              <Feather name="share-2" size={20} color={colors.ink} />
+              <Text style={styles.actionLabel}>Share</Text>
             </Pressable>
             <Pressable accessibilityRole="button" onPress={confirmDelete} style={styles.iconButton}>
               <Feather name="trash-2" size={20} color={colors.danger} />
@@ -743,6 +760,30 @@ const styles = StyleSheet.create({
     fontSize: type.small,
     fontWeight: '800',
     includeFontPadding: false,
+  },
+  attributionCard: {
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(178, 120, 75, 0.25)',
+    backgroundColor: 'rgba(255, 253, 250, 0.86)',
+    padding: spacing.md,
+  },
+  attributionText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  attributionTitle: {
+    color: colors.ink,
+    fontWeight: '900',
+  },
+  attributionMeta: {
+    color: colors.muted,
+    fontSize: type.small,
+    marginTop: 2,
   },
   card: {
     borderRadius: 8,
