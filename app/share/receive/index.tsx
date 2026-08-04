@@ -55,7 +55,7 @@ export default function ReceiveSharedCairn() {
   async function pickPackageFile() {
     setBusy(true);
     try {
-      const picked = await File.pickFileAsync(undefined, 'application/json');
+      const picked = await File.pickFileAsync();
       const file = Array.isArray(picked) ? picked[0] : picked;
       await loadPackage(await file.text());
     } catch {

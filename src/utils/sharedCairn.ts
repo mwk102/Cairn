@@ -8,6 +8,7 @@ export const SHARED_CAIRN_PACKAGE_TYPE = 'cairn-shared-place';
 export const SHARED_CAIRN_VERSION = 1;
 
 const SHARED_PHOTO_DIRECTORY_NAME = 'cairn-shared-photos';
+const SHARED_PACKAGE_DIRECTORY_NAME = 'cairn-share-packages';
 const PLACE_TYPE_SET = new Set<string>(PLACE_TYPES);
 
 export type SharedCairnPackage = {
@@ -186,6 +187,19 @@ export async function createSharedCairnPackage(cairn: Cairn, options: SharedCair
   }
 
   return JSON.stringify(packageData, null, 2);
+}
+
+export async function createSharedCairnFile(cairn: Cairn, options: SharedCairnOptions) {
+  const directory = new Directory(Paths.cache, SHARED_PACKAGE_DIRECTORY_NAME);
+  if (!directory.exists) {
+    directory.create({ intermediates: true, idempotent: true });
+  }
+
+  const file = new File(directory, sharedCairnFilename(cairn.name));
+  file.create({ intermediates: true, overwrite: true });
+  file.write(await createSharedCairnPackage(cairn, options));
+
+  return file;
 }
 
 export function sharedCairnFilename(cairnName: string) {

@@ -12,13 +12,14 @@ import {
 } from 'react-native';
 import { Feather } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
+import * as Sharing from 'expo-sharing';
 import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router';
 
 import { Button } from '@/components/Button';
 import { getCairn } from '@/data/cairns';
 import { colors, spacing, type } from '@/theme';
 import { Cairn, PLACE_TYPE_ICONS } from '@/types/cairn';
-import { createSharedCairnPackage, sharedCairnFilename } from '@/utils/sharedCairn';
+import { createSharedCairnFile, createSharedCairnPackage, sharedCairnFilename } from '@/utils/sharedCairn';
 
 export default function ShareCairn() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -34,40 +35,57 @@ export default function ShareCairn() {
     }, [id]),
   );
 
-  async function packageJson() {
+  async function packageJson(includePhoto = includeCoverPhoto) {
     if (!cairn) return null;
 
     return createSharedCairnPackage(cairn, {
       includeReferenceNotes,
-      includeCoverPhoto,
+      includeCoverPhoto: includePhoto,
       creatorName: 'Matt',
     });
   }
 
   async function copyPackage() {
-    const json = await packageJson();
+    const json = await packageJson(false);
     if (!json || !cairn) return;
 
-    await Clipboard.setStringAsync(json);
-    Alert.alert('Cairn copied', `${cairn.name} is ready to paste into Cairn on another phone.`);
+    try {
+      await Clipboard.setStringAsync(json);
+      Alert.alert('Cairn copied', `${cairn.name} was copied without the cover photo. Use the .cairn file to include photos.`);
+    } catch {
+      Alert.alert('Copy failed', 'Cairn could not copy the fallback package.');
+    }
   }
 
   async function openShareSheet() {
-    const json = await packageJson();
-    if (!json || !cairn || sharing) return;
+    if (!cairn || sharing) return;
 
     setSharing(true);
     try {
-      await Share.share(
-        {
-          title: sharedCairnFilename(cairn.name),
-          message: json,
-        },
-        {
-          dialogTitle: `Share ${cairn.name}`,
-          subject: sharedCairnFilename(cairn.name),
-        },
-      );
+      const file = await createSharedCairnFile(cairn, {
+        includeReferenceNotes,
+        includeCoverPhoto,
+        creatorName: 'Matt',
+      });
+
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(file.uri, {
+          mimeType: 'application/json',
+          dialogTitle: `Share ${sharedCairnFilename(cairn.name)}`,
+          UTI: 'public.json',
+        });
+      } else {
+        await Share.share(
+          {
+            title: sharedCairnFilename(cairn.name),
+            message: await packageJson(false) ?? '',
+          },
+          {
+            dialogTitle: `Share ${cairn.name}`,
+            subject: sharedCairnFilename(cairn.name),
+          },
+        );
+      }
       router.replace(`/cairn/${id}/share/success`);
     } catch {
       Alert.alert('Share failed', 'Cairn could not open the share sheet.');
@@ -105,6 +123,10 @@ export default function ShareCairn() {
       </View>
 
       <Text style={styles.philosophy}>A Cairn can be shared, but a story cannot. The receiver gets the place and builds their own journey.</Text>
+      <View style={styles.packageNote}>
+        <Feather name="file-text" size={18} color={colors.moss} />
+        <Text style={styles.packageNoteText}>Cairn shares a small .cairn package that can be opened by another Cairn app.</Text>
+      </View>
 
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Included</Text>
@@ -139,15 +161,15 @@ export default function ShareCairn() {
       </View>
 
       <View style={styles.actions}>
-        <Button label={sharing ? 'Sharing...' : 'Share Cairn'} onPress={openShareSheet} disabled={sharing} />
+        <Button label={sharing ? 'Sharing...' : 'Share .cairn File'} onPress={openShareSheet} disabled={sharing} />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Copy Cairn package"
+          accessibilityLabel="Copy Cairn fallback package"
           onPress={copyPackage}
           style={({ pressed }) => [styles.copyButton, pressed && styles.pressed]}
         >
           <Feather name="copy" size={18} color={colors.moss} />
-          <Text style={styles.copyText}>Copy Package</Text>
+          <Text style={styles.copyText}>Copy Fallback</Text>
         </Pressable>
       </View>
     </ScrollView>
@@ -264,6 +286,25 @@ const styles = StyleSheet.create({
     fontSize: type.body,
     lineHeight: 24,
     fontWeight: '600',
+  },
+  packageNote: {
+    minHeight: 54,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.14)',
+    backgroundColor: 'rgba(203, 216, 198, 0.28)',
+    padding: spacing.sm,
+  },
+  packageNoteText: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.ink,
+    fontSize: type.small,
+    lineHeight: 19,
+    fontWeight: '700',
   },
   card: {
     borderRadius: 8,
