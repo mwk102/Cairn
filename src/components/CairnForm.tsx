@@ -37,6 +37,7 @@ import { existingPhotoUris } from '@/utils/photoStorage';
 
 const FALLBACK_COORDINATE = { latitude: 47.6205, longitude: -122.3493 };
 const CAIRN_MARKER_IMAGE = require('../../assets/markers/cairn-badge.png');
+const TAG_SUGGESTIONS = ['4x4 access', 'toilets', 'Cell Service', 'short hike'];
 
 type Props = {
   initial?: Cairn;
@@ -95,6 +96,8 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
   const [manualCoordinatesOpen, setManualCoordinatesOpen] = useState(false);
   const [draftCoordinate, setDraftCoordinate] = useState<Coordinate>(coordinate);
   const [draftMoving, setDraftMoving] = useState(false);
+  const formTitle = initial ? 'Refine this Cairn' : 'Build Cairn';
+  const formPrompt = initial ? 'Update the details that help this place stay useful.' : 'Save the place, then let the story grow over time.';
 
   function updateCoordinate(next: Coordinate, changed = true) {
     setCoordinate(next);
@@ -381,7 +384,14 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
         keyboardDismissMode="interactive"
         keyboardShouldPersistTaps="handled"
       >
-        <Text style={styles.prompt}>What did you discover today?</Text>
+        <View style={styles.formIntro}>
+          <MiniCairnGlyph />
+          <View style={styles.formIntroText}>
+            <Text style={styles.prompt}>{formTitle}</Text>
+            <Text style={styles.promptHelp}>{formPrompt}</Text>
+          </View>
+        </View>
+        <Text style={styles.sectionEyebrow}>Location</Text>
         <View style={styles.coordinateBox}>
           <View style={styles.locationHeader}>
             <View>
@@ -545,6 +555,7 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
         {permissionDenied ? (
           <Text style={styles.help}>Location permission is off. You can still paste coordinates or choose the place on the map.</Text>
         ) : null}
+        <Text style={styles.sectionEyebrow}>Place</Text>
         <View onLayout={(event) => {
           nameTopRef.current = event.nativeEvent.layout.y;
         }}>
@@ -561,6 +572,7 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
           <Text style={styles.label}>Place type</Text>
           <PlaceTypePicker value={placeType} onChange={setPlaceType} />
         </View>
+        <Text style={styles.sectionEyebrow}>Journal</Text>
         <View onLayout={(event) => {
           storyTopRef.current = event.nativeEvent.layout.y;
         }}>
@@ -574,6 +586,7 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
             maxLength={800}
             style={styles.story}
           />
+          <Text style={styles.fieldHint}>The memory you want this Cairn to carry.</Text>
         </View>
         <View onLayout={(event) => {
           notesTopRef.current = event.nativeEvent.layout.y;
@@ -588,7 +601,9 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
             maxLength={500}
             style={styles.notes}
           />
+          <Text style={styles.fieldHint}>Practical details for next time. Bullets work well here.</Text>
         </View>
+        <Text style={styles.sectionEyebrow}>Details</Text>
         <View style={styles.group}>
           <Text style={styles.label}>Tags</Text>
           {tags.length > 0 ? (
@@ -607,7 +622,19 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
               ))}
             </View>
           ) : (
-            <Text style={styles.help}>Add practical details you will want to scan later.</Text>
+            <View style={styles.suggestionList}>
+              {TAG_SUGGESTIONS.map((suggestion) => (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={`Use ${suggestion} tag`}
+                  key={suggestion}
+                  onPress={() => setTagInput(suggestion)}
+                  style={({ pressed }) => [styles.suggestionChip, pressed && styles.pressed]}
+                >
+                  <Text style={styles.suggestionText}>{suggestion}</Text>
+                </Pressable>
+              ))}
+            </View>
           )}
           <View style={styles.tagInputRow}>
             <Field
@@ -635,7 +662,8 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
         <View onLayout={(event) => {
           photosTopRef.current = event.nativeEvent.layout.y;
           maybeScrollToInitialPhotos();
-        }}>
+        }} style={styles.group}>
+          <Text style={styles.label}>Photos</Text>
           <PhotoStrip photos={photos} onChange={setPhotos} />
         </View>
         {initial && photos.length > 0 ? (
@@ -674,7 +702,9 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
           </View>
           <Switch value={isFavorite} onValueChange={setIsFavorite} trackColor={{ true: colors.fern }} />
         </View>
-        <Button label={submitLabel} onPress={save} disabled={saving} />
+        <View style={styles.saveBlock}>
+          <Button label={saving ? 'Saving...' : submitLabel} onPress={save} disabled={saving} />
+        </View>
       </ScrollView>
       <Modal visible={chooserOpen} animationType="slide" onRequestClose={() => setChooserOpen(false)}>
         <View style={styles.chooserScreen}>
@@ -773,12 +803,41 @@ const styles = StyleSheet.create({
   content: {
     padding: spacing.md,
     paddingBottom: 180,
+    gap: spacing.sm,
+  },
+  formIntro: {
+    minHeight: 74,
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.14)',
+    backgroundColor: 'rgba(203, 216, 198, 0.2)',
+    padding: spacing.md,
+    marginBottom: spacing.xs,
+  },
+  formIntroText: {
+    flex: 1,
+    minWidth: 0,
   },
   prompt: {
     color: colors.ink,
     fontSize: type.heading,
-    fontWeight: '800',
+    fontWeight: '900',
+  },
+  promptHelp: {
+    color: colors.muted,
+    lineHeight: 21,
+    marginTop: 2,
+  },
+  sectionEyebrow: {
+    color: colors.moss,
+    fontSize: type.small,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+    marginTop: spacing.md,
+    marginBottom: -spacing.xs,
   },
   mapWrap: {
     height: 230,
@@ -962,10 +1021,35 @@ const styles = StyleSheet.create({
     minHeight: 150,
     textAlignVertical: 'top',
   },
+  fieldHint: {
+    color: colors.muted,
+    fontSize: type.small,
+    lineHeight: 18,
+    marginTop: spacing.xs,
+  },
   tagList: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
+  },
+  suggestionList: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.xs,
+  },
+  suggestionChip: {
+    minHeight: 30,
+    justifyContent: 'center',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.14)',
+    backgroundColor: 'rgba(255, 253, 250, 0.72)',
+    paddingHorizontal: spacing.sm,
+  },
+  suggestionText: {
+    color: colors.muted,
+    fontSize: type.small,
+    fontWeight: '800',
   },
   tagChip: {
     minHeight: 34,
@@ -1036,6 +1120,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
+    backgroundColor: colors.paper,
+    padding: spacing.md,
+  },
+  saveBlock: {
+    marginTop: spacing.sm,
   },
   help: {
     color: colors.muted,
