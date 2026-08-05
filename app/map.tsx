@@ -427,19 +427,6 @@ export default function MapHome() {
           onPress={() => setSelectedCairnId(null)}
           initialRegion={initialRegion}
         >
-          {cairns.map((cairn) => (
-            <Marker
-              key={cairn.id}
-              anchor={{ x: 0.5, y: 0.5 }}
-              coordinate={{ latitude: cairn.latitude, longitude: cairn.longitude }}
-              image={markerImageFor(cairn)}
-              zIndex={cairn.id === selectedCairnId ? 30 : cairn.isFavorite ? 12 : 8}
-              onPress={(event) => {
-                event.stopPropagation();
-                focusCairnOnMap(cairn, 360);
-              }}
-            />
-          ))}
           {selectedCairn ? (
             <>
               <Circle
@@ -467,6 +454,19 @@ export default function MapHome() {
               strokeWidth={1}
             />
           ) : null}
+          {cairns.map((cairn) => (
+            <Marker
+              key={cairn.id}
+              anchor={{ x: 0.5, y: 0.5 }}
+              coordinate={{ latitude: cairn.latitude, longitude: cairn.longitude }}
+              image={markerImageFor(cairn)}
+              zIndex={cairn.id === selectedCairnId ? 40 : cairn.isFavorite ? 12 : 8}
+              onPress={(event) => {
+                event.stopPropagation();
+                focusCairnOnMap(cairn, 360);
+              }}
+            />
+          ))}
         </MapView>
       ) : mapAvailable ? (
         <View style={styles.mapUnavailable}>
