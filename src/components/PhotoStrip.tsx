@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Alert, Animated, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 
@@ -72,9 +72,35 @@ export function PhotoStrip({ photos, onChange }: Props) {
 
 function PhotoTile({ uri, onRemove }: { uri: string; onRemove: () => void }) {
   const [missing, setMissing] = useState(false);
+  const settle = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    settle.setValue(0);
+    Animated.spring(settle, {
+      toValue: 1,
+      speed: 18,
+      bounciness: 6,
+      useNativeDriver: true,
+    }).start();
+  }, [settle, uri]);
 
   return (
-    <View style={styles.photoWrap}>
+    <Animated.View
+      style={[
+        styles.photoWrap,
+        {
+          opacity: settle,
+          transform: [
+            {
+              scale: settle.interpolate({
+                inputRange: [0, 1],
+                outputRange: [0.92, 1],
+              }),
+            },
+          ],
+        },
+      ]}
+    >
       {missing ? (
         <View style={styles.missingPhoto}>
           <Feather name="image" size={18} color={colors.muted} />
@@ -91,7 +117,7 @@ function PhotoTile({ uri, onRemove }: { uri: string; onRemove: () => void }) {
       >
         <Feather name="x" size={16} color={colors.white} />
       </Pressable>
-    </View>
+    </Animated.View>
   );
 }
 

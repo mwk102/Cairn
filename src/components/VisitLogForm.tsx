@@ -1,6 +1,7 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import {
   Alert,
+  Animated,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -33,6 +34,25 @@ export function VisitLogForm({ initial, submitLabel, onSubmit, onDelete }: Props
   const [photos, setPhotos] = useState(initial?.photos.map((photo) => photo.localUri) ?? []);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pageMoment = useRef(new Animated.Value(0)).current;
+
+  function playPageMoment() {
+    pageMoment.setValue(0);
+    return new Promise<void>((resolve) => {
+      Animated.sequence([
+        Animated.timing(pageMoment, {
+          toValue: 1,
+          duration: 230,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pageMoment, {
+          toValue: 0,
+          duration: 180,
+          useNativeDriver: true,
+        }),
+      ]).start(() => resolve());
+    });
+  }
 
   async function save() {
     const visitDate = parseDateInput(visitDateText);
@@ -45,6 +65,9 @@ export function VisitLogForm({ initial, submitLabel, onSubmit, onDelete }: Props
     setSaving(true);
     setError(null);
     try {
+      if (!editing) {
+        await playPageMoment();
+      }
       await onSubmit({ visitDate, notes, photos: existingPhotoUris(photos) });
     } finally {
       setSaving(false);
@@ -128,6 +151,34 @@ export function VisitLogForm({ initial, submitLabel, onSubmit, onDelete }: Props
           </Pressable>
         ) : null}
       </ScrollView>
+      <Animated.View
+        pointerEvents="none"
+        style={[
+          styles.pageMoment,
+          {
+            opacity: pageMoment,
+            transform: [
+              {
+                translateY: pageMoment.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [12, 0],
+                }),
+              },
+              {
+                scale: pageMoment.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [0.96, 1],
+                }),
+              },
+            ],
+          },
+        ]}
+      >
+        <View style={styles.pageMomentIcon}>
+          <Feather name="book-open" size={22} color={colors.moss} />
+        </View>
+        <Text style={styles.pageMomentText}>Page added</Text>
+      </Animated.View>
     </KeyboardAvoidingView>
   );
 }
@@ -202,5 +253,37 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.72,
+  },
+  pageMoment: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: 34,
+    minHeight: 64,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.14)',
+    backgroundColor: colors.paper,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 4,
+  },
+  pageMomentIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(203, 216, 198, 0.5)',
+  },
+  pageMomentText: {
+    color: colors.ink,
+    fontWeight: '900',
   },
 });

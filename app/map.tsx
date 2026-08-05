@@ -91,6 +91,8 @@ export default function MapHome() {
   const buildNavigating = useRef(false);
   const menuSlide = useRef(new Animated.Value(0)).current;
   const menuHandleGlow = useRef(new Animated.Value(0)).current;
+  const filterMotion = useRef(new Animated.Value(0)).current;
+  const searchGlow = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
   const [mainMenuOpen, setMainMenuOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -101,6 +103,7 @@ export default function MapHome() {
   const [rippleRadius, setRippleRadius] = useState(0);
   const [rippleOpacity, setRippleOpacity] = useState(0);
   const [migrationBusy, setMigrationBusy] = useState(false);
+  const [filterWidth, setFilterWidth] = useState(0);
   const { cairns, loading, error, reload } = useCairns();
   const { coordinate, permissionDenied, requestLocation } = useCurrentLocation();
   const mapAvailable = canUseNativeMap();
@@ -219,6 +222,25 @@ export default function MapHome() {
       ]),
     ]).start();
   }, [menuHandleGlow, menuOpen, menuSlide]);
+
+  useEffect(() => {
+    const index = menuFilter === 'all' ? 0 : menuFilter === 'recent' ? 1 : 2;
+    Animated.spring(filterMotion, {
+      toValue: index,
+      speed: 18,
+      bounciness: 5,
+      useNativeDriver: true,
+    }).start();
+  }, [filterMotion, menuFilter]);
+
+  function setSearchFocused(focused: boolean) {
+    Animated.timing(searchGlow, {
+      toValue: focused ? 1 : 0,
+      duration: 180,
+      easing: Easing.out(Easing.cubic),
+      useNativeDriver: false,
+    }).start();
+  }
 
   useEffect(() => () => {
     buildNavigating.current = false;
@@ -878,7 +900,21 @@ export default function MapHome() {
               <Feather name="x" size={22} color={colors.ink} />
             </Pressable>
           </View>
-          <View style={styles.searchBox}>
+          <Animated.View
+            style={[
+              styles.searchBox,
+              {
+                borderColor: searchGlow.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: ['rgba(49, 86, 66, 0.16)', 'rgba(49, 86, 66, 0.42)'],
+                }),
+                backgroundColor: searchGlow.interpolate({
+                  inputRange: [0, 1],
+                  outputRange: [colors.cream, 'rgba(203, 216, 198, 0.2)'],
+                }),
+              },
+            ]}
+          >
             <Feather name="search" size={17} color={colors.muted} />
             <TextInput
               ref={searchInputRef}
@@ -889,6 +925,8 @@ export default function MapHome() {
               returnKeyType="search"
               autoCapitalize="none"
               autoCorrect={false}
+              onFocus={() => setSearchFocused(true)}
+              onBlur={() => setSearchFocused(false)}
               style={styles.searchInput}
             />
             {searchQuery ? (
@@ -901,7 +939,7 @@ export default function MapHome() {
                 <Feather name="x" size={16} color={colors.muted} />
               </Pressable>
             ) : null}
-          </View>
+          </Animated.View>
           <View style={styles.placesSummary}>
             <View style={styles.placesSummaryItem}>
               <Text style={styles.placesSummaryValue}>{cairns.length}</Text>
@@ -920,7 +958,29 @@ export default function MapHome() {
               </Text>
             </View>
           </View>
-          <View style={styles.filterRow}>
+          <View
+            style={styles.filterRow}
+            onLayout={(event) => setFilterWidth(event.nativeEvent.layout.width)}
+          >
+            {filterWidth > 0 ? (
+              <Animated.View
+                pointerEvents="none"
+                style={[
+                  styles.filterIndicator,
+                  {
+                    width: (filterWidth - 6) / 3,
+                    transform: [
+                      {
+                        translateX: filterMotion.interpolate({
+                          inputRange: [0, 1, 2],
+                          outputRange: [0, (filterWidth - 6) / 3, ((filterWidth - 6) / 3) * 2],
+                        }),
+                      },
+                    ],
+                  },
+                ]}
+              />
+            ) : null}
             <Pressable
               accessibilityRole="button"
               accessibilityState={{ selected: menuFilter === 'all' }}
@@ -1655,6 +1715,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   filterRow: {
+    position: 'relative',
     flexDirection: 'row',
     gap: spacing.xs,
     marginBottom: spacing.md,
@@ -1664,6 +1725,16 @@ const styles = StyleSheet.create({
     backgroundColor: colors.cream,
     padding: 3,
   },
+  filterIndicator: {
+    position: 'absolute',
+    left: 3,
+    top: 3,
+    bottom: 3,
+    borderRadius: 6,
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.18)',
+  },
   filterButton: {
     flex: 1,
     minHeight: 36,
@@ -1671,11 +1742,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'transparent',
+    zIndex: 1,
   },
   filterButtonSelected: {
-    backgroundColor: colors.paper,
-    borderWidth: 1,
-    borderColor: 'rgba(49, 86, 66, 0.18)',
+    backgroundColor: 'transparent',
   },
   filterLabel: {
     color: colors.muted,

@@ -54,6 +54,8 @@ export default function CairnDetail() {
   const [showAllVisits, setShowAllVisits] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
+  const favoritePop = useRef(new Animated.Value(1)).current;
+  const latestVisitGlow = useRef(new Animated.Value(0)).current;
   const clearStoneStyles = [styles.clearStone0, styles.clearStone1, styles.clearStone2, styles.clearStone3];
   const clearStoneTransforms = [
     { rotate: '2deg', translateX: 0 },
@@ -83,6 +85,26 @@ export default function CairnDetail() {
       getCairn(id).then(setCairn);
     }, [id]),
   );
+
+  useEffect(() => {
+    if (!cairn?.visitLogs.length) return;
+
+    latestVisitGlow.setValue(0);
+    Animated.sequence([
+      Animated.timing(latestVisitGlow, {
+        toValue: 1,
+        duration: 380,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }),
+      Animated.timing(latestVisitGlow, {
+        toValue: 0,
+        duration: 760,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: false,
+      }),
+    ]).start();
+  }, [cairn?.visitLogs.length, latestVisitGlow]);
 
   useEffect(() => {
     if (!clearing || !id) return;
@@ -207,6 +229,15 @@ export default function CairnDetail() {
     if (!cairn) return;
     const next = !cairn.isFavorite;
     setCairn({ ...cairn, isFavorite: next });
+    if (next) {
+      favoritePop.setValue(0.72);
+      Animated.spring(favoritePop, {
+        toValue: 1,
+        speed: 22,
+        bounciness: 10,
+        useNativeDriver: true,
+      }).start();
+    }
     await setCairnFavorite(cairn.id, next);
   }
 
@@ -218,57 +249,72 @@ export default function CairnDetail() {
     const isLatest = cairn?.visitLogs[0]?.id === visit.id;
 
     return (
-      <Pressable
+      <Animated.View
         accessibilityRole="button"
         accessibilityLabel={`Edit visit from ${formatDate(visit.visitDate)}`}
         key={visit.id}
-        onPress={() => router.push(`/cairn/${id}/visit/${visit.id}/edit`)}
-        style={({ pressed }) => [styles.visitRow, isLatest && styles.latestVisitRow, pressed && styles.pressed]}
+        style={[
+          styles.visitRow,
+          isLatest && styles.latestVisitRow,
+          isLatest && {
+            backgroundColor: latestVisitGlow.interpolate({
+              inputRange: [0, 1],
+              outputRange: ['rgba(203, 216, 198, 0.22)', 'rgba(178, 120, 75, 0.18)'],
+            }),
+          },
+        ]}
       >
-        <View style={styles.timeline}>
-          <View style={[styles.timelineDot, isLatest && styles.latestTimelineDot]} />
-          {!isLast ? <View style={styles.timelineLine} /> : null}
-        </View>
-        <View style={styles.visitBody}>
-          <View style={styles.visitHeaderRow}>
-            <View style={styles.visitDateBlock}>
-              {isLatest ? (
-                <View style={styles.latestBadge}>
-                  <Text style={styles.latestBadgeText}>Latest visit</Text>
-                </View>
-              ) : null}
-              <Text style={styles.visitDate}>{formatDate(visit.visitDate)}</Text>
-            </View>
-            <View style={styles.visitEditHint}>
-              <Feather name="edit-3" size={14} color={colors.moss} />
-            </View>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={`Edit visit from ${formatDate(visit.visitDate)}`}
+          onPress={() => router.push(`/cairn/${id}/visit/${visit.id}/edit`)}
+          style={({ pressed }) => [styles.visitPressable, pressed && styles.pressed]}
+        >
+          <View style={styles.timeline}>
+            <View style={[styles.timelineDot, isLatest && styles.latestTimelineDot]} />
+            {!isLast ? <View style={styles.timelineLine} /> : null}
           </View>
-          <Text style={styles.visitNotes}>{previewText(visit.notes)}</Text>
-          {visit.photos.length > 0 ? (
-            <View style={styles.visitPhotos}>
-              {visit.photos.slice(0, 3).map((photo) => {
-                const photoIndex = cairn?.photos.findIndex((item) => item.id === photo.id) ?? -1;
-
-                return (
-                  <Pressable
-                    accessibilityRole="imagebutton"
-                    accessibilityLabel="View visit photo"
-                    key={photo.id}
-                    onPress={() => photoIndex >= 0 && setViewingPhotoIndex(photoIndex)}
-                  >
-                    <Image source={{ uri: photo.localUri }} style={styles.visitThumb} />
-                  </Pressable>
-                );
-              })}
-              {visit.photos.length > 3 ? (
-                <View style={styles.visitMorePhotos}>
-                  <Text style={styles.visitMorePhotosText}>+{visit.photos.length - 3}</Text>
-                </View>
-              ) : null}
+          <View style={styles.visitBody}>
+            <View style={styles.visitHeaderRow}>
+              <View style={styles.visitDateBlock}>
+                {isLatest ? (
+                  <View style={styles.latestBadge}>
+                    <Text style={styles.latestBadgeText}>Latest visit</Text>
+                  </View>
+                ) : null}
+                <Text style={styles.visitDate}>{formatDate(visit.visitDate)}</Text>
+              </View>
+              <View style={styles.visitEditHint}>
+                <Feather name="edit-3" size={14} color={colors.moss} />
+              </View>
             </View>
-          ) : null}
-        </View>
-      </Pressable>
+            <Text style={styles.visitNotes}>{previewText(visit.notes)}</Text>
+            {visit.photos.length > 0 ? (
+              <View style={styles.visitPhotos}>
+                {visit.photos.slice(0, 3).map((photo) => {
+                  const photoIndex = cairn?.photos.findIndex((item) => item.id === photo.id) ?? -1;
+
+                  return (
+                    <Pressable
+                      accessibilityRole="imagebutton"
+                      accessibilityLabel="View visit photo"
+                      key={photo.id}
+                      onPress={() => photoIndex >= 0 && setViewingPhotoIndex(photoIndex)}
+                    >
+                      <Image source={{ uri: photo.localUri }} style={styles.visitThumb} />
+                    </Pressable>
+                  );
+                })}
+                {visit.photos.length > 3 ? (
+                  <View style={styles.visitMorePhotos}>
+                    <Text style={styles.visitMorePhotosText}>+{visit.photos.length - 3}</Text>
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+        </Pressable>
+      </Animated.View>
     );
   }
 
@@ -346,11 +392,13 @@ export default function CairnDetail() {
               onPress={toggleFavorite}
               style={({ pressed }) => [styles.favoriteButton, pressed && styles.pressed]}
             >
-              <MaterialIcons
-                name={cairn.isFavorite ? 'star' : 'star-border'}
-                size={30}
-                color={cairn.isFavorite ? colors.clay : colors.muted}
-              />
+              <Animated.View style={{ transform: [{ scale: favoritePop }] }}>
+                <MaterialIcons
+                  name={cairn.isFavorite ? 'star' : 'star-border'}
+                  size={30}
+                  color={cairn.isFavorite ? colors.clay : colors.muted}
+                />
+              </Animated.View>
               <Text style={styles.favoriteText}>Favorite</Text>
             </Pressable>
           </View>
@@ -943,6 +991,12 @@ const styles = StyleSheet.create({
   },
   latestVisitRow: {
     backgroundColor: 'rgba(203, 216, 198, 0.22)',
+  },
+  visitPressable: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.sm,
   },
   timeline: {
     width: 16,
