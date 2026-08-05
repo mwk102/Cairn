@@ -33,6 +33,7 @@ import {
   validateCoordinates,
 } from '@/utils/coordinates';
 import { canUseNativeMap } from '@/utils/mapAvailability';
+import { existingPhotoUris } from '@/utils/photoStorage';
 
 const FALLBACK_COORDINATE = { latitude: 47.6205, longitude: -122.3493 };
 const CAIRN_MARKER_IMAGE = require('../../assets/markers/cairn-badge.png');
@@ -302,6 +303,11 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
     setSaving(true);
     setError(null);
     try {
+      const savedPhotos = existingPhotoUris(photos);
+      const savedPrimaryPhotoUri = primaryPhotoUri && savedPhotos.includes(primaryPhotoUri)
+        ? primaryPhotoUri
+        : savedPhotos[0] ?? null;
+
       await onSubmit({
         name,
         story,
@@ -312,8 +318,8 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
         tags,
         isFavorite,
         primaryPhotoId: initial?.primaryPhotoId ?? null,
-        primaryPhotoUri,
-        photos,
+        primaryPhotoUri: savedPrimaryPhotoUri,
+        photos: savedPhotos,
       });
     } finally {
       setSaving(false);

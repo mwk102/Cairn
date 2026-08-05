@@ -1,9 +1,10 @@
-import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
 import { Feather } from '@expo/vector-icons';
 
 import { colors, spacing } from '@/theme';
-import { persistPickedPhoto } from '@/utils/photoStorage';
+import { persistPickedPhotos } from '@/utils/photoStorage';
 
 type Props = {
   photos: string[];
@@ -12,19 +13,38 @@ type Props = {
 
 export function PhotoStrip({ photos, onChange }: Props) {
   async function addPhoto() {
+    if (photos.length >= 10) {
+      Alert.alert('Photo limit reached', 'Each Cairn can keep up to 10 photos for now.');
+      return;
+    }
+
     const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permission.granted) return;
+
     const result = await ImagePicker.launchImageLibraryAsync({
       mediaTypes: ImagePicker.MediaTypeOptions.Images,
       quality: 0.8,
       allowsMultipleSelection: true,
       selectionLimit: 10 - photos.length,
     });
+
     if (!result.canceled) {
-      const persistedPhotos = await Promise.all(
-        result.assets.map((asset) => persistPickedPhoto(asset.uri)),
-      );
-      onChange([...photos, ...persistedPhotos].slice(0, 10));
+      const persistedPhotos = await persistPickedPhotos(result.assets.map((asset) => asset.uri));
+      const savedPhotos = persistedPhotos
+        .filter((photo) => photo.ok)
+        .map((photo) => photo.uri);
+      const failedCount = persistedPhotos.length - savedPhotos.length;
+
+      if (savedPhotos.length > 0) {
+        onChange([...photos, ...savedPhotos].slice(0, 10));
+      }
+
+      if (failedCount > 0) {
+        Alert.alert(
+          'Some photos could not be added',
+          `${failedCount} ${failedCount === 1 ? 'photo was' : 'photos were'} not readable. The rest were saved to Cairn.`,
+        );
+      }
     }
   }
 
@@ -38,20 +58,39 @@ export function PhotoStrip({ photos, onChange }: Props) {
       {photos.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photos}>
           {photos.map((uri) => (
-            <View key={uri} style={styles.photoWrap}>
-              <Image source={{ uri }} style={styles.photo} />
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Remove photo"
-                onPress={() => onChange(photos.filter((photo) => photo !== uri))}
-                style={styles.remove}
-              >
-                <Feather name="x" size={16} color={colors.white} />
-              </Pressable>
-            </View>
+            <PhotoTile
+              key={uri}
+              uri={uri}
+              onRemove={() => onChange(photos.filter((photo) => photo !== uri))}
+            />
           ))}
         </ScrollView>
       ) : null}
+    </View>
+  );
+}
+
+function PhotoTile({ uri, onRemove }: { uri: string; onRemove: () => void }) {
+  const [missing, setMissing] = useState(false);
+
+  return (
+    <View style={styles.photoWrap}>
+      {missing ? (
+        <View style={styles.missingPhoto}>
+          <Feather name="image" size={18} color={colors.muted} />
+          <Text style={styles.missingText}>Missing</Text>
+        </View>
+      ) : (
+        <Image source={{ uri }} style={styles.photo} onError={() => setMissing(true)} />
+      )}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="Remove photo"
+        onPress={onRemove}
+        style={styles.remove}
+      >
+        <Feather name="x" size={16} color={colors.white} />
+      </Pressable>
     </View>
   );
 }
@@ -89,6 +128,22 @@ const styles = StyleSheet.create({
   photoWrap: {
     width: 82,
     height: 82,
+  },
+  missingPhoto: {
+    width: 82,
+    height: 82,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.line,
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 3,
+    backgroundColor: colors.cream,
+  },
+  missingText: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
   },
   remove: {
     position: 'absolute',

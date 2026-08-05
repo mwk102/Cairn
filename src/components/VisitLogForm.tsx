@@ -17,6 +17,7 @@ import { PhotoStrip } from '@/components/PhotoStrip';
 import { colors, spacing, type } from '@/theme';
 import { VisitLog, VisitLogInput } from '@/types/cairn';
 import { formatDateInput, parseDateInput } from '@/utils/date';
+import { existingPhotoUris } from '@/utils/photoStorage';
 
 type Props = {
   initial?: VisitLog;
@@ -43,7 +44,7 @@ export function VisitLogForm({ initial, submitLabel, onSubmit, onDelete }: Props
     setSaving(true);
     setError(null);
     try {
-      await onSubmit({ visitDate, notes, photos });
+      await onSubmit({ visitDate, notes, photos: existingPhotoUris(photos) });
     } finally {
       setSaving(false);
     }

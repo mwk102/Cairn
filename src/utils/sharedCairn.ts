@@ -176,6 +176,10 @@ export async function createSharedCairnPackage(cairn: Cairn, options: SharedCair
   if (options.includeCoverPhoto && primaryPhoto?.localUri) {
     try {
       const file = new File(primaryPhoto.localUri);
+      if (!file.exists) {
+        return JSON.stringify(packageData, null, 2);
+      }
+
       const mimeType = file.type || mimeTypeFor(primaryPhoto);
       packageData.coverPhoto = {
         mimeType,
@@ -226,6 +230,9 @@ async function persistCoverPhoto(packageData: SharedCairnPackage) {
   const file = new File(directory, `${Crypto.randomUUID()}.${extension}`);
   file.create({ intermediates: true, overwrite: true });
   file.write(packageData.coverPhoto.base64, { encoding: 'base64' });
+  if (!file.exists) {
+    return null;
+  }
 
   return file.uri;
 }
