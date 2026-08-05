@@ -27,6 +27,7 @@ type Props = {
 };
 
 export function VisitLogForm({ initial, submitLabel, onSubmit, onDelete }: Props) {
+  const editing = !!initial;
   const [visitDateText, setVisitDateText] = useState(formatDateInput(initial?.visitDate ?? new Date().toISOString()));
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [photos, setPhotos] = useState(initial?.photos.map((photo) => photo.localUri) ?? []);
@@ -81,8 +82,10 @@ export function VisitLogForm({ initial, submitLabel, onSubmit, onDelete }: Props
             <Feather name="book-open" size={22} color={colors.moss} />
           </View>
           <View style={styles.introText}>
-            <Text style={styles.title}>Log Visit</Text>
-            <Text style={styles.help}>Add another page to this place&apos;s history.</Text>
+            <Text style={styles.title}>{editing ? 'Edit Visit' : 'Log Visit'}</Text>
+            <Text style={styles.help}>
+              {editing ? 'Refine this page in the place journal.' : 'Add another page to this place&apos;s history.'}
+            </Text>
           </View>
         </View>
         <Field
@@ -100,15 +103,18 @@ export function VisitLogForm({ initial, submitLabel, onSubmit, onDelete }: Props
           error={error ?? undefined}
         />
         <Field
-          label="What happened?"
+          label="Journal entry"
           value={notes}
           onChangeText={setNotes}
-          placeholder="Beautiful weather. Found more berries than last year."
+          placeholder="Beautiful weather. Found more berries than last year. The pond still had frogs."
           multiline
           maxLength={800}
           style={styles.notes}
         />
-        <PhotoStrip photos={photos} onChange={setPhotos} />
+        <View style={styles.photoSection}>
+          <Text style={styles.sectionLabel}>Photos from this visit</Text>
+          <PhotoStrip photos={photos} onChange={setPhotos} />
+        </View>
         <Button label={submitLabel} onPress={save} disabled={saving} />
         {onDelete ? (
           <Pressable
@@ -171,6 +177,13 @@ const styles = StyleSheet.create({
   notes: {
     minHeight: 170,
     textAlignVertical: 'top',
+  },
+  photoSection: {
+    gap: spacing.sm,
+  },
+  sectionLabel: {
+    color: colors.ink,
+    fontWeight: '900',
   },
   deleteButton: {
     minHeight: 52,

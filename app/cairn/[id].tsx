@@ -215,20 +215,34 @@ export default function CairnDetail() {
   }
 
   function renderVisit(visit: VisitLog, isLast: boolean) {
+    const isLatest = cairn?.visitLogs[0]?.id === visit.id;
+
     return (
       <Pressable
         accessibilityRole="button"
         accessibilityLabel={`Edit visit from ${formatDate(visit.visitDate)}`}
         key={visit.id}
         onPress={() => router.push(`/cairn/${id}/visit/${visit.id}/edit`)}
-        style={({ pressed }) => [styles.visitRow, pressed && styles.pressed]}
+        style={({ pressed }) => [styles.visitRow, isLatest && styles.latestVisitRow, pressed && styles.pressed]}
       >
         <View style={styles.timeline}>
-          <View style={styles.timelineDot} />
+          <View style={[styles.timelineDot, isLatest && styles.latestTimelineDot]} />
           {!isLast ? <View style={styles.timelineLine} /> : null}
         </View>
         <View style={styles.visitBody}>
-          <Text style={styles.visitDate}>{formatDate(visit.visitDate)}</Text>
+          <View style={styles.visitHeaderRow}>
+            <View style={styles.visitDateBlock}>
+              {isLatest ? (
+                <View style={styles.latestBadge}>
+                  <Text style={styles.latestBadgeText}>Latest visit</Text>
+                </View>
+              ) : null}
+              <Text style={styles.visitDate}>{formatDate(visit.visitDate)}</Text>
+            </View>
+            <View style={styles.visitEditHint}>
+              <Feather name="edit-3" size={14} color={colors.moss} />
+            </View>
+          </View>
           <Text style={styles.visitNotes}>{previewText(visit.notes)}</Text>
           {visit.photos.length > 0 ? (
             <View style={styles.visitPhotos}>
@@ -246,10 +260,14 @@ export default function CairnDetail() {
                   </Pressable>
                 );
               })}
+              {visit.photos.length > 3 ? (
+                <View style={styles.visitMorePhotos}>
+                  <Text style={styles.visitMorePhotosText}>+{visit.photos.length - 3}</Text>
+                </View>
+              ) : null}
             </View>
           ) : null}
         </View>
-        <Feather name="chevron-right" size={22} color={colors.muted} />
       </Pressable>
     );
   }
@@ -433,8 +451,11 @@ export default function CairnDetail() {
               </View>
             ) : (
               <View style={styles.emptyVisits}>
-                <Text style={styles.emptyTitle}>No visits have been logged yet.</Text>
-                <Text style={styles.emptyText}>Log your first visit to start building this place&apos;s history.</Text>
+                <View style={styles.emptyVisitIcon}>
+                  <Feather name="book-open" size={22} color={colors.moss} />
+                </View>
+                <Text style={styles.emptyTitle}>Start this place&apos;s history.</Text>
+                <Text style={styles.emptyText}>Log what happened the next time you return, or add a past visit you want to remember.</Text>
                 <Button label="Log Visit" onPress={() => router.push(`/cairn/${id}/visit/new`)} />
               </View>
             )}
@@ -915,18 +936,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'stretch',
     gap: spacing.sm,
-    minHeight: 88,
+    minHeight: 104,
+    borderRadius: 8,
+    paddingVertical: spacing.xs,
+    paddingRight: spacing.sm,
+  },
+  latestVisitRow: {
+    backgroundColor: 'rgba(203, 216, 198, 0.22)',
   },
   timeline: {
     width: 16,
     alignItems: 'center',
+    marginLeft: spacing.xs,
   },
   timelineDot: {
     width: 10,
     height: 10,
     borderRadius: 5,
-    marginTop: 7,
+    marginTop: spacing.sm,
     backgroundColor: colors.moss,
+  },
+  latestTimelineDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    borderWidth: 3,
+    borderColor: colors.paper,
+    backgroundColor: colors.clay,
   },
   timelineLine: {
     flex: 1,
@@ -937,18 +973,50 @@ const styles = StyleSheet.create({
   visitBody: {
     flex: 1,
     minWidth: 0,
-    paddingBottom: spacing.sm,
+    padding: spacing.sm,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(49, 86, 66, 0.1)',
+  },
+  visitHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.sm,
+  },
+  visitDateBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  latestBadge: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    backgroundColor: 'rgba(178, 120, 75, 0.14)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    marginBottom: 4,
+  },
+  latestBadgeText: {
+    color: colors.clay,
+    fontSize: 10,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   visitDate: {
     color: colors.ink,
     fontWeight: '900',
   },
+  visitEditHint: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(203, 216, 198, 0.44)',
+  },
   visitNotes: {
-    color: colors.muted,
-    lineHeight: 21,
-    marginTop: 3,
+    color: colors.ink,
+    lineHeight: 22,
+    marginTop: spacing.xs,
   },
   visitPhotos: {
     flexDirection: 'row',
@@ -959,6 +1027,18 @@ const styles = StyleSheet.create({
     width: 54,
     height: 54,
     borderRadius: 8,
+  },
+  visitMorePhotos: {
+    width: 54,
+    height: 54,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(203, 216, 198, 0.45)',
+  },
+  visitMorePhotosText: {
+    color: colors.moss,
+    fontWeight: '900',
   },
   viewAllVisits: {
     minHeight: 42,
@@ -972,15 +1052,32 @@ const styles = StyleSheet.create({
     fontWeight: '900',
   },
   emptyVisits: {
+    alignItems: 'center',
     gap: spacing.sm,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
+    backgroundColor: 'rgba(203, 216, 198, 0.18)',
+    padding: spacing.lg,
+  },
+  emptyVisitIcon: {
+    width: 54,
+    height: 54,
+    borderRadius: 27,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.paper,
   },
   emptyTitle: {
     color: colors.ink,
+    fontSize: 18,
     fontWeight: '900',
+    textAlign: 'center',
   },
   emptyText: {
     color: colors.muted,
     lineHeight: 22,
+    textAlign: 'center',
   },
   notesFormatted: {
     gap: 7,
