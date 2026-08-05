@@ -37,6 +37,7 @@ export type SharedCairnOptions = {
   includeReferenceNotes: boolean;
   includeCoverPhoto: boolean;
   creatorName: string;
+  creatorId: string;
 };
 
 export type DuplicateCandidate = {
@@ -166,7 +167,7 @@ export async function createSharedCairnPackage(cairn: Cairn, options: SharedCair
     referenceNotes: options.includeReferenceNotes ? cairn.notes : '',
     createdBy: {
       displayName: trimmedCreatorName,
-      id: `local-${trimmedCreatorName.toLowerCase().replace(/[^a-z0-9]+/g, '-') || 'cairn-user'}`,
+      id: options.creatorId.trim() || Crypto.randomUUID(),
     },
     createdAt: cairn.createdAt,
     sharedAt: new Date().toISOString(),

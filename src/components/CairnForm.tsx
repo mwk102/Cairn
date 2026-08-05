@@ -39,6 +39,7 @@ const CAIRN_MARKER_IMAGE = require('../../assets/markers/cairn-badge.png');
 
 type Props = {
   initial?: Cairn;
+  initialFocus?: 'photos';
   submitLabel: string;
   onSubmit: (input: CairnInput) => Promise<void>;
 };
@@ -53,13 +54,15 @@ function MiniCairnGlyph() {
   );
 }
 
-export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
+export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Props) {
   const mapRef = useRef<MapView>(null);
   const chooserMapRef = useRef<MapView>(null);
   const scrollRef = useRef<ScrollView>(null);
   const nameTopRef = useRef(0);
   const storyTopRef = useRef(0);
   const notesTopRef = useRef(0);
+  const photosTopRef = useRef(0);
+  const didInitialPhotoFocusRef = useRef(false);
   const insets = useSafeAreaInsets();
   const { requestLocation, permissionDenied } = useCurrentLocation();
   const mapAvailable = canUseNativeMap();
@@ -344,6 +347,22 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
     }, 250);
   }
 
+  function scrollPhotosIntoView() {
+    window.setTimeout(() => {
+      scrollRef.current?.scrollTo({
+        y: Math.max(photosTopRef.current - 96, 0),
+        animated: true,
+      });
+    }, 300);
+  }
+
+  function maybeScrollToInitialPhotos() {
+    if (initialFocus !== 'photos' || didInitialPhotoFocusRef.current) return;
+
+    didInitialPhotoFocusRef.current = true;
+    scrollPhotosIntoView();
+  }
+
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
@@ -607,7 +626,12 @@ export function CairnForm({ initial, submitLabel, onSubmit }: Props) {
             </Pressable>
           </View>
         </View>
-        <PhotoStrip photos={photos} onChange={setPhotos} />
+        <View onLayout={(event) => {
+          photosTopRef.current = event.nativeEvent.layout.y;
+          maybeScrollToInitialPhotos();
+        }}>
+          <PhotoStrip photos={photos} onChange={setPhotos} />
+        </View>
         {initial && photos.length > 0 ? (
           <View style={styles.group}>
             <Text style={styles.label}>Hero photo</Text>

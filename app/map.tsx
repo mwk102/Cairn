@@ -15,7 +15,7 @@ import {
   View,
 } from 'react-native';
 import MapView, { Circle, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
-import { router, useFocusEffect } from 'expo-router';
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -23,6 +23,7 @@ import * as Clipboard from 'expo-clipboard';
 import { Button } from '@/components/Button';
 import { CairnMarker } from '@/components/CairnMarker';
 import { createCairnMigrationJson, importCairnsFromMigrationJson } from '@/data/cairns';
+import { getLastSelectedCairnId, setLastSelectedCairnId } from '@/data/settings';
 import { useCairns } from '@/hooks/useCairns';
 import { useCurrentLocation } from '@/hooks/useCurrentLocation';
 import { colors, spacing, type } from '@/theme';
@@ -39,6 +40,15 @@ const FALLBACK_REGION = {
 const CAIRN_MARKER_IMAGE = require('../assets/markers/cairn-badge.png');
 const CAIRN_MARKER_FAVORITE_IMAGE = require('../assets/markers/cairn-badge-favorite.png');
 const CAIRN_MARKER_SELECTED_IMAGE = require('../assets/markers/cairn-badge-selected.png');
+
+function regionForCairn(cairn: Cairn) {
+  return {
+    latitude: cairn.latitude,
+    longitude: cairn.longitude,
+    latitudeDelta: Math.min(FALLBACK_REGION.latitudeDelta, 0.08),
+    longitudeDelta: Math.min(FALLBACK_REGION.longitudeDelta, 0.08),
+  };
+}
 
 function CairnBrandMark() {
   return (
@@ -70,6 +80,7 @@ function BuildCairnGlyph() {
 }
 
 export default function MapHome() {
+  const { menu, cairn: focusedCairnId } = useLocalSearchParams<{ menu?: string; cairn?: string }>();
   const mapRef = useRef<MapView>(null);
   const searchInputRef = useRef<TextInput>(null);
   const searchFocusTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -80,10 +91,12 @@ export default function MapHome() {
   const menuSlide = useRef(new Animated.Value(0)).current;
   const menuHandleGlow = useRef(new Animated.Value(0)).current;
   const insets = useSafeAreaInsets();
+  const [mainMenuOpen, setMainMenuOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
   const [menuFilter, setMenuFilter] = useState<'all' | 'favorites'>('all');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedCairnId, setSelectedCairnId] = useState<string | null>(null);
+  const [selectedCairnId, setSelectedCairnId] = useState<string | null>(focusedCairnId ?? null);
+  const [lastSelectionLoaded, setLastSelectionLoaded] = useState(false);
   const [rippleRadius, setRippleRadius] = useState(0);
   const [rippleOpacity, setRippleOpacity] = useState(0);
   const [migrationBusy, setMigrationBusy] = useState(false);
@@ -91,6 +104,8 @@ export default function MapHome() {
   const { coordinate, permissionDenied, requestLocation } = useCurrentLocation();
   const mapAvailable = canUseNativeMap();
   const selectedCairn = cairns.find((cairn) => cairn.id === selectedCairnId);
+  const initialRegion = selectedCairn ? regionForCairn(selectedCairn) : FALLBACK_REGION;
+  const mapReady = lastSelectionLoaded && (!selectedCairnId || !!selectedCairn || !loading);
   const trimmedSearchQuery = searchQuery.trim().toLowerCase();
   const visibleMenuCairns = (menuFilter === 'favorites'
     ? cairns.filter((cairn) => cairn.isFavorite)
@@ -111,22 +126,54 @@ export default function MapHome() {
     requestLocation();
   }, [requestLocation]);
 
+  useEffect(() => {
+    let active = true;
+
+    getLastSelectedCairnId()
+      .then((lastSelectedId) => {
+        if (!active) return;
+        if (!focusedCairnId && lastSelectedId) {
+          setSelectedCairnId(lastSelectedId);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setLastSelectionLoaded(true);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [focusedCairnId]);
+
   useFocusEffect(
     useCallback(() => {
       reload();
-    }, [reload]),
+      if (menu === 'main') {
+        setMenuOpen(false);
+        setMainMenuOpen(true);
+        router.setParams({ menu: undefined });
+      }
+    }, [menu, reload]),
   );
 
+  const focusCairnOnMap = useCallback((cairn: Cairn, duration = 560) => {
+    setSelectedCairnId(cairn.id);
+    void setLastSelectedCairnId(cairn.id);
+    mapRef.current?.animateToRegion(regionForCairn(cairn), duration);
+  }, []);
+
   useEffect(() => {
-    if (!coordinate) return;
-    mapRef.current?.animateToRegion(
-      {
-        ...FALLBACK_REGION,
-        ...coordinate,
-      },
-      600,
-    );
-  }, [coordinate]);
+    if (!focusedCairnId) return;
+
+    const target = cairns.find((cairn) => cairn.id === focusedCairnId);
+    if (!target) return;
+
+    setSelectedCairnId(target.id);
+    void setLastSelectedCairnId(target.id);
+    router.setParams({ cairn: undefined });
+  }, [cairns, focusedCairnId]);
 
   useEffect(() => {
     if (selectedCairnId && !cairns.some((cairn) => cairn.id === selectedCairnId)) {
@@ -198,6 +245,8 @@ export default function MapHome() {
 
   function openCairn(cairn: Cairn) {
     closePlacesMenu();
+    setSelectedCairnId(cairn.id);
+    void setLastSelectedCairnId(cairn.id);
     router.push(`/cairn/${cairn.id}`);
   }
 
@@ -206,6 +255,7 @@ export default function MapHome() {
       clearTimeout(searchFocusTimeout.current);
     }
 
+    setMainMenuOpen(false);
     setMenuOpen(true);
 
     if (focusSearch) {
@@ -224,6 +274,27 @@ export default function MapHome() {
 
     searchInputRef.current?.blur();
     setMenuOpen(false);
+  }
+
+  function closeMainMenu() {
+    setMainMenuOpen(false);
+  }
+
+  function returnToMainMenu() {
+    closePlacesMenu();
+    setMainMenuOpen(true);
+  }
+
+  function openReceiveCairn() {
+    closeMainMenu();
+    closePlacesMenu();
+    router.push('/share/receive');
+  }
+
+  function openSharingIdentity() {
+    closeMainMenu();
+    closePlacesMenu();
+    router.push('/settings/sharing-identity');
   }
 
   function heroPhotoFor(cairn: Cairn) {
@@ -345,7 +416,7 @@ export default function MapHome() {
 
   return (
     <View style={styles.screen}>
-      {mapAvailable ? (
+      {mapAvailable && mapReady ? (
         <MapView
           ref={mapRef}
           provider={PROVIDER_GOOGLE}
@@ -354,10 +425,7 @@ export default function MapHome() {
           showsMyLocationButton={false}
           toolbarEnabled={false}
           onPress={() => setSelectedCairnId(null)}
-          initialRegion={{
-            ...FALLBACK_REGION,
-            ...(coordinate ?? {}),
-          }}
+          initialRegion={initialRegion}
         >
           {cairns.map((cairn) => (
             <Marker
@@ -365,12 +433,31 @@ export default function MapHome() {
               anchor={{ x: 0.5, y: 0.5 }}
               coordinate={{ latitude: cairn.latitude, longitude: cairn.longitude }}
               image={markerImageFor(cairn)}
+              zIndex={cairn.id === selectedCairnId ? 30 : cairn.isFavorite ? 12 : 8}
               onPress={(event) => {
                 event.stopPropagation();
-                setSelectedCairnId(cairn.id);
+                focusCairnOnMap(cairn, 360);
               }}
             />
           ))}
+          {selectedCairn ? (
+            <>
+              <Circle
+                center={{ latitude: selectedCairn.latitude, longitude: selectedCairn.longitude }}
+                radius={112}
+                fillColor="rgba(178, 120, 75, 0.10)"
+                strokeColor="rgba(178, 120, 75, 0.94)"
+                strokeWidth={3}
+              />
+              <Circle
+                center={{ latitude: selectedCairn.latitude, longitude: selectedCairn.longitude }}
+                radius={50}
+                fillColor="rgba(255, 253, 250, 0.34)"
+                strokeColor="rgba(255, 253, 250, 0.98)"
+                strokeWidth={2}
+              />
+            </>
+          ) : null}
           {selectedCairn && rippleOpacity > 0 ? (
             <Circle
               center={{ latitude: selectedCairn.latitude, longitude: selectedCairn.longitude }}
@@ -381,6 +468,11 @@ export default function MapHome() {
             />
           ) : null}
         </MapView>
+      ) : mapAvailable ? (
+        <View style={styles.mapUnavailable}>
+          <CairnBrandMark />
+          <Text style={styles.mapUnavailableTitle}>Opening your last Cairn...</Text>
+        </View>
       ) : (
         <View style={styles.mapUnavailable}>
           <CairnBrandMark />
@@ -394,7 +486,7 @@ export default function MapHome() {
             accessibilityRole="button"
             accessibilityLabel="Open Cairn menu"
             disabled={loading}
-            onPress={() => openPlacesMenu()}
+            onPress={() => setMainMenuOpen(true)}
             style={({ pressed }) => [styles.headerButton, pressed && styles.pressed]}
           >
             <Feather name="menu" size={20} color={colors.ink} />
@@ -602,6 +694,114 @@ export default function MapHome() {
         </Animated.View>
       </Pressable>
       <Modal
+        animationType="fade"
+        transparent
+        visible={mainMenuOpen}
+        onRequestClose={closeMainMenu}
+      >
+        <Pressable style={styles.modalBackdrop} onPress={closeMainMenu} />
+        <View style={[styles.mainMenuSheet, { paddingBottom: Math.max(insets.bottom + spacing.md, spacing.lg) }]}>
+          <View style={styles.menuHandle} />
+          <View style={styles.menuHeader}>
+            <View style={styles.menuTitleBlock}>
+              <Text style={styles.menuTitle}>Cairn</Text>
+              <Text style={styles.menuSubtitle}>Your place journal</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close Cairn menu"
+              onPress={closeMainMenu}
+              style={styles.closeButton}
+            >
+              <Feather name="x" size={22} color={colors.ink} />
+            </Pressable>
+          </View>
+          <View style={styles.mainMenuList}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open places"
+              onPress={() => openPlacesMenu()}
+              style={({ pressed }) => [styles.mainMenuRow, pressed && styles.pressed]}
+            >
+              <View style={styles.mainMenuIcon}>
+                <Feather name="map" size={18} color={colors.moss} />
+              </View>
+              <View style={styles.mainMenuText}>
+                <Text style={styles.mainMenuTitle}>Places</Text>
+                <Text style={styles.mainMenuHelp}>{cairns.length} {cairns.length === 1 ? 'place' : 'places'} saved</Text>
+              </View>
+              <Feather name="chevron-right" size={20} color={colors.muted} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Receive shared Cairn"
+              onPress={openReceiveCairn}
+              style={({ pressed }) => [styles.mainMenuRow, pressed && styles.pressed]}
+            >
+              <View style={styles.mainMenuIcon}>
+                <Feather name="share-2" size={18} color={colors.moss} />
+              </View>
+              <View style={styles.mainMenuText}>
+                <Text style={styles.mainMenuTitle}>Receive Cairn</Text>
+                <Text style={styles.mainMenuHelp}>Open a shared .cairn package</Text>
+              </View>
+              <Feather name="chevron-right" size={20} color={colors.muted} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Open sharing identity"
+              onPress={openSharingIdentity}
+              style={({ pressed }) => [styles.mainMenuRow, pressed && styles.pressed]}
+            >
+              <View style={styles.mainMenuIcon}>
+                <Feather name="user" size={18} color={colors.moss} />
+              </View>
+              <View style={styles.mainMenuText}>
+                <Text style={styles.mainMenuTitle}>Sharing Identity</Text>
+                <Text style={styles.mainMenuHelp}>Manage creator name and ID</Text>
+              </View>
+              <Feather name="chevron-right" size={20} color={colors.muted} />
+            </Pressable>
+          </View>
+          <View style={styles.migrationBox}>
+            <View style={styles.migrationText}>
+              <Text style={styles.migrationTitle}>Move local Cairns</Text>
+              <Text style={styles.migrationHelp}>Copy in Expo Go, paste in the APK.</Text>
+            </View>
+            <View style={styles.migrationActions}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Copy Cairn export"
+                disabled={migrationBusy || cairns.length === 0}
+                onPress={copyCairnExport}
+                style={({ pressed }) => [
+                  styles.migrationButton,
+                  (pressed || migrationBusy) && styles.pressed,
+                  cairns.length === 0 && styles.disabledButton,
+                ]}
+              >
+                <Feather name="copy" size={15} color={colors.moss} />
+                <Text style={styles.migrationButtonText}>Copy</Text>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Paste Cairn import"
+                disabled={migrationBusy}
+                onPress={pasteCairnImport}
+                style={({ pressed }) => [
+                  styles.migrationButton,
+                  styles.migrationButtonPrimary,
+                  (pressed || migrationBusy) && styles.pressed,
+                ]}
+              >
+                <Feather name="clipboard" size={15} color={colors.white} />
+                <Text style={styles.migrationButtonPrimaryText}>Paste</Text>
+              </Pressable>
+            </View>
+          </View>
+        </View>
+      </Modal>
+      <Modal
         animationType="none"
         transparent
         visible={menuOpen}
@@ -645,11 +845,21 @@ export default function MapHome() {
             ]}
           />
           <View style={styles.menuHeader}>
-            <View style={styles.menuTitleBlock}>
-              <Text style={styles.menuTitle}>Places</Text>
-              <Text style={styles.menuSubtitle}>
-                {cairns.length} {cairns.length === 1 ? 'place' : 'places'} saved
-              </Text>
+            <View style={styles.menuHeaderLeft}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Back to Cairn menu"
+                onPress={returnToMainMenu}
+                style={styles.backButton}
+              >
+                <Feather name="arrow-left" size={22} color={colors.ink} />
+              </Pressable>
+              <View style={styles.menuTitleBlock}>
+                <Text style={styles.menuTitle}>Places</Text>
+                <Text style={styles.menuSubtitle}>
+                  {cairns.length} {cairns.length === 1 ? 'place' : 'places'} saved
+                </Text>
+              </View>
             </View>
             <Pressable
               accessibilityRole="button"
@@ -701,57 +911,6 @@ export default function MapHome() {
             >
               <Text style={[styles.filterLabel, menuFilter === 'favorites' && styles.filterLabelSelected]}>Favorites</Text>
             </Pressable>
-          </View>
-          <View style={styles.migrationBox}>
-            <View style={styles.migrationText}>
-              <Text style={styles.migrationTitle}>Move local Cairns</Text>
-              <Text style={styles.migrationHelp}>Copy in Expo Go, paste in the APK.</Text>
-            </View>
-            <View style={styles.migrationActions}>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Copy Cairn export"
-                disabled={migrationBusy || cairns.length === 0}
-                onPress={copyCairnExport}
-                style={({ pressed }) => [
-                  styles.migrationButton,
-                  (pressed || migrationBusy) && styles.pressed,
-                  cairns.length === 0 && styles.disabledButton,
-                ]}
-              >
-                <Feather name="copy" size={15} color={colors.moss} />
-                <Text style={styles.migrationButtonText}>Copy</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Paste Cairn import"
-                disabled={migrationBusy}
-                onPress={pasteCairnImport}
-                style={({ pressed }) => [
-                  styles.migrationButton,
-                  styles.migrationButtonPrimary,
-                  (pressed || migrationBusy) && styles.pressed,
-                ]}
-              >
-                <Feather name="clipboard" size={15} color={colors.white} />
-                <Text style={styles.migrationButtonPrimaryText}>Paste</Text>
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Receive shared Cairn"
-                onPress={() => {
-                  closePlacesMenu();
-                  router.push('/share/receive');
-                }}
-                style={({ pressed }) => [
-                  styles.migrationButton,
-                  (pressed || migrationBusy) && styles.pressed,
-                ]}
-              >
-                <Feather name="share-2" size={15} color={colors.moss} />
-                <Text style={styles.migrationButtonText}>Receive</Text>
-              </Pressable>
-            </View>
           </View>
           {cairns.length === 0 ? (
             <View style={styles.menuEmpty}>
@@ -1268,6 +1427,55 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: 'transparent',
   },
+  mainMenuSheet: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: spacing.md,
+    borderRadius: 8,
+    backgroundColor: colors.paper,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.16)',
+    paddingHorizontal: spacing.md,
+  },
+  mainMenuList: {
+    gap: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  mainMenuRow: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
+    backgroundColor: colors.white,
+    padding: spacing.sm,
+  },
+  mainMenuIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(203, 216, 198, 0.44)',
+  },
+  mainMenuText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  mainMenuTitle: {
+    color: colors.ink,
+    fontSize: type.body,
+    fontWeight: '900',
+  },
+  mainMenuHelp: {
+    color: colors.muted,
+    fontSize: type.small,
+    lineHeight: 18,
+    marginTop: 2,
+  },
   menuSheet: {
     position: 'absolute',
     left: 0,
@@ -1295,6 +1503,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+  },
+  menuHeaderLeft: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  backButton: {
+    width: 42,
+    height: 42,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: -spacing.sm,
   },
   menuTitleBlock: {
     gap: 2,
@@ -1357,8 +1579,7 @@ const styles = StyleSheet.create({
     color: colors.ink,
   },
   migrationBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'stretch',
     gap: spacing.sm,
     borderRadius: 8,
     borderWidth: 1,
@@ -1384,6 +1605,7 @@ const styles = StyleSheet.create({
   },
   migrationActions: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
     gap: spacing.xs,
   },
   migrationButton: {

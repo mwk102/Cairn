@@ -81,24 +81,48 @@ export default function ReceiveSharedCairn() {
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
-      <Stack.Screen options={{ title: 'Receive Cairn' }} />
+      <Stack.Screen
+        options={{
+          title: 'Receive Cairn',
+          headerLeft: () => (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Back to Cairn menu"
+              onPress={() => router.replace('/map?menu=main')}
+              style={styles.headerBackButton}
+            >
+              <Feather name="arrow-left" size={24} color={colors.ink} />
+            </Pressable>
+          ),
+        }}
+      />
       {!packageData ? (
         <View style={styles.emptyCard}>
           <View style={styles.fileIcon}>
             <Feather name="file-text" size={36} color={colors.moss} />
           </View>
           <Text style={styles.title}>Receive Cairn</Text>
-          <Text style={styles.help}>Paste or open a Cairn package someone shared with you.</Text>
-          <Button label={busy ? 'Reading...' : 'Paste from Clipboard'} onPress={pastePackage} disabled={busy} />
+          <Text style={styles.help}>Open a .cairn package someone shared with you.</Text>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Choose Cairn package file"
             onPress={pickPackageFile}
+            style={({ pressed }) => [styles.primaryFileButton, pressed && styles.pressed]}
+          >
+            <Feather name="folder" size={18} color={colors.white} />
+            <Text style={styles.primaryFileText}>Choose .cairn File</Text>
+          </Pressable>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Paste Cairn text backup from clipboard"
+            onPress={pastePackage}
+            disabled={busy}
             style={({ pressed }) => [styles.secondaryButton, pressed && styles.pressed]}
           >
-            <Feather name="folder" size={18} color={colors.moss} />
-            <Text style={styles.secondaryText}>Choose File</Text>
+            <Feather name="clipboard" size={18} color={colors.moss} />
+            <Text style={styles.secondaryText}>{busy ? 'Reading...' : 'Paste Text Backup'}</Text>
           </Pressable>
+          <Text style={styles.backupHelp}>Text Backup is only needed if someone could not send the .cairn file.</Text>
         </View>
       ) : (
         <>
@@ -155,7 +179,8 @@ export default function ReceiveSharedCairn() {
           <View style={styles.attributionCard}>
             <Feather name="user" size={18} color={colors.moss} />
             <View style={styles.attributionText}>
-              <Text style={styles.attributionTitle}>Created by {packageData.createdBy.displayName}</Text>
+              <Text style={styles.attributionLabel}>Creator</Text>
+              <Text style={styles.attributionTitle}>{packageData.createdBy.displayName}</Text>
               <Text style={styles.help}>Shared on {formatDate(packageData.sharedAt)}</Text>
             </View>
           </View>
@@ -224,9 +249,29 @@ const styles = StyleSheet.create({
     borderColor: colors.line,
     backgroundColor: colors.white,
   },
+  primaryFileButton: {
+    minHeight: 52,
+    alignSelf: 'stretch',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    borderRadius: 8,
+    backgroundColor: colors.moss,
+  },
+  primaryFileText: {
+    color: colors.white,
+    fontWeight: '900',
+  },
   secondaryText: {
     color: colors.moss,
     fontWeight: '900',
+  },
+  backupHelp: {
+    color: colors.muted,
+    fontSize: type.small,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   previewCard: {
     overflow: 'hidden',
@@ -340,6 +385,12 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontWeight: '900',
   },
+  attributionLabel: {
+    color: colors.moss,
+    fontSize: type.small,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
   cancelButton: {
     minHeight: 52,
     alignItems: 'center',
@@ -351,5 +402,11 @@ const styles = StyleSheet.create({
   },
   pressed: {
     opacity: 0.72,
+  },
+  headerBackButton: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

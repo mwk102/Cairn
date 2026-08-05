@@ -8,7 +8,7 @@ import { colors } from '@/theme';
 import { Cairn, CairnInput } from '@/types/cairn';
 
 export default function EditCairn() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, section } = useLocalSearchParams<{ id: string; section?: string }>();
   const [cairn, setCairn] = useState<Cairn | null>(null);
 
   useFocusEffect(
@@ -32,5 +32,12 @@ export default function EditCairn() {
     );
   }
 
-  return <CairnForm initial={cairn} submitLabel="Save Cairn" onSubmit={submit} />;
+  return (
+    <CairnForm
+      initial={cairn}
+      initialFocus={section === 'photos' ? 'photos' : undefined}
+      submitLabel="Save Cairn"
+      onSubmit={submit}
+    />
+  );
 }

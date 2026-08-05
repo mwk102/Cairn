@@ -17,6 +17,7 @@ import { router, Stack, useFocusEffect, useLocalSearchParams } from 'expo-router
 
 import { Button } from '@/components/Button';
 import { getCairn } from '@/data/cairns';
+import { getSharingIdentity, SharingIdentity } from '@/data/settings';
 import { colors, spacing, type } from '@/theme';
 import { Cairn, PLACE_TYPE_ICONS } from '@/types/cairn';
 import { createSharedCairnFile, createSharedCairnPackage, sharedCairnFilename } from '@/utils/sharedCairn';
@@ -26,12 +27,14 @@ export default function ShareCairn() {
   const [cairn, setCairn] = useState<Cairn | null>(null);
   const [includeReferenceNotes, setIncludeReferenceNotes] = useState(true);
   const [includeCoverPhoto, setIncludeCoverPhoto] = useState(true);
+  const [identity, setIdentity] = useState<SharingIdentity | null>(null);
   const [sharing, setSharing] = useState(false);
 
   useFocusEffect(
     useCallback(() => {
       if (!id) return;
       getCairn(id).then(setCairn);
+      getSharingIdentity().then(setIdentity);
     }, [id]),
   );
 
@@ -41,7 +44,8 @@ export default function ShareCairn() {
     return createSharedCairnPackage(cairn, {
       includeReferenceNotes,
       includeCoverPhoto: includePhoto,
-      creatorName: 'Matt',
+      creatorName: identity?.displayName ?? 'Cairn User',
+      creatorId: identity?.creatorId ?? '',
     });
   }
 
@@ -51,9 +55,9 @@ export default function ShareCairn() {
 
     try {
       await Clipboard.setStringAsync(json);
-      Alert.alert('Cairn copied', `${cairn.name} was copied without the cover photo. Use the .cairn file to include photos.`);
+      Alert.alert('Text backup copied', `${cairn.name} was copied without photos. Use the .cairn package when you want to include the cover photo.`);
     } catch {
-      Alert.alert('Copy failed', 'Cairn could not copy the fallback package.');
+      Alert.alert('Copy failed', 'Cairn could not copy the text backup.');
     }
   }
 
@@ -65,7 +69,8 @@ export default function ShareCairn() {
       const file = await createSharedCairnFile(cairn, {
         includeReferenceNotes,
         includeCoverPhoto,
-        creatorName: 'Matt',
+        creatorName: identity?.displayName ?? 'Cairn User',
+        creatorId: identity?.creatorId ?? '',
       });
 
       if (await Sharing.isAvailableAsync()) {
@@ -103,6 +108,7 @@ export default function ShareCairn() {
   }
 
   const primaryPhoto = cairn.photos.find((photo) => photo.id === cairn.primaryPhotoId) ?? cairn.photos[0];
+  const packageName = sharedCairnFilename(cairn.name);
 
   return (
     <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
@@ -125,7 +131,10 @@ export default function ShareCairn() {
       <Text style={styles.philosophy}>A Cairn can be shared, but a story cannot. The receiver gets the place and builds their own journey.</Text>
       <View style={styles.packageNote}>
         <Feather name="file-text" size={18} color={colors.moss} />
-        <Text style={styles.packageNoteText}>Cairn shares a small .cairn package that can be opened by another Cairn app.</Text>
+        <View style={styles.packageNoteBody}>
+          <Text style={styles.packageNoteTitle}>{packageName}</Text>
+          <Text style={styles.packageNoteText}>A private .cairn package that another Cairn app can open.</Text>
+        </View>
       </View>
 
       <View style={styles.card}>
@@ -133,7 +142,7 @@ export default function ShareCairn() {
         <ChecklistItem label="Name and location" checked />
         <ChecklistItem label="Place type" checked />
         <ChecklistItem label="Tags" checked />
-        <ChecklistItem label="Created by Matt" checked />
+        <ChecklistItem label={`Creator${identity ? `: ${identity.displayName}` : ''}`} checked />
       </View>
 
       <View style={styles.card}>
@@ -161,16 +170,17 @@ export default function ShareCairn() {
       </View>
 
       <View style={styles.actions}>
-        <Button label={sharing ? 'Sharing...' : 'Share .cairn File'} onPress={openShareSheet} disabled={sharing} />
+        <Button label={sharing ? 'Sharing...' : 'Share Cairn Package'} onPress={openShareSheet} disabled={sharing} />
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Copy Cairn fallback package"
+          accessibilityLabel="Copy text backup"
           onPress={copyPackage}
           style={({ pressed }) => [styles.copyButton, pressed && styles.pressed]}
         >
           <Feather name="copy" size={18} color={colors.moss} />
-          <Text style={styles.copyText}>Copy Fallback</Text>
+          <Text style={styles.copyText}>Copy Text Backup</Text>
         </Pressable>
+        <Text style={styles.backupHelp}>Text Backup is for apps that cannot send files. It does not include photos.</Text>
       </View>
     </ScrollView>
   );
@@ -299,12 +309,19 @@ const styles = StyleSheet.create({
     padding: spacing.sm,
   },
   packageNoteText: {
-    flex: 1,
-    minWidth: 0,
     color: colors.ink,
     fontSize: type.small,
     lineHeight: 19,
     fontWeight: '700',
+  },
+  packageNoteBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  packageNoteTitle: {
+    color: colors.ink,
+    fontWeight: '900',
+    marginBottom: 2,
   },
   card: {
     borderRadius: 8,
@@ -378,6 +395,12 @@ const styles = StyleSheet.create({
   copyText: {
     color: colors.moss,
     fontWeight: '900',
+  },
+  backupHelp: {
+    color: colors.muted,
+    fontSize: type.small,
+    lineHeight: 18,
+    textAlign: 'center',
   },
   pressed: {
     opacity: 0.72,

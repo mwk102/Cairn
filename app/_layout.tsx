@@ -29,6 +29,7 @@ export default function RootLayout() {
           <Stack.Screen name="cairn/[id]/visit/[visitId]/edit" options={{ title: 'Edit Visit' }} />
           <Stack.Screen name="share/receive/index" options={{ title: 'Receive Cairn' }} />
           <Stack.Screen name="share/receive/success" options={{ title: 'Cairn Added' }} />
+          <Stack.Screen name="settings/sharing-identity" options={{ title: 'Sharing Identity' }} />
         </Stack>
       </SafeAreaProvider>
     </GestureHandlerRootView>

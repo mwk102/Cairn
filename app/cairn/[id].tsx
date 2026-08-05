@@ -52,6 +52,7 @@ export default function CairnDetail() {
   const [cairn, setCairn] = useState<Cairn | null>(null);
   const [viewingPhotoIndex, setViewingPhotoIndex] = useState<number | null>(null);
   const [showAllVisits, setShowAllVisits] = useState(false);
+  const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
   const clearStoneStyles = [styles.clearStone0, styles.clearStone1, styles.clearStone2, styles.clearStone3];
   const clearStoneTransforms = [
@@ -191,6 +192,7 @@ export default function CairnDetail() {
 
   function confirmDelete() {
     if (!id) return;
+    setActionMenuOpen(false);
     Alert.alert('Delete this Cairn?', 'This action cannot be undone.', [
       { text: 'Cancel', style: 'cancel' },
       {
@@ -209,12 +211,7 @@ export default function CairnDetail() {
   }
 
   function openMenu() {
-    Alert.alert(cairn?.name ?? 'Cairn', undefined, [
-      { text: 'Share Cairn', onPress: () => router.push(`/cairn/${id}/share`) },
-      { text: 'Edit Cairn', onPress: () => router.push(`/cairn/${id}/edit`) },
-      { text: 'Delete Cairn', style: 'destructive', onPress: confirmDelete },
-      { text: 'Cancel', style: 'cancel' },
-    ]);
+    setActionMenuOpen(true);
   }
 
   function renderVisit(visit: VisitLog, isLast: boolean) {
@@ -302,7 +299,7 @@ export default function CairnDetail() {
               <Pressable
                 accessibilityRole="button"
                 accessibilityLabel="Edit photos"
-                onPress={() => router.push(`/cairn/${id}/edit`)}
+                onPress={() => router.push(`/cairn/${id}/edit?section=photos`)}
                 style={({ pressed }) => [styles.heroButton, pressed && styles.pressed]}
               >
                 <Feather name="image" size={21} color={colors.ink} />
@@ -380,7 +377,7 @@ export default function CairnDetail() {
             <View style={styles.attributionCard}>
               <Feather name="user" size={18} color={colors.moss} />
               <View style={styles.attributionText}>
-                <Text style={styles.attributionTitle}>Created by {cairn.sharedByName}</Text>
+                <Text style={styles.attributionTitle}>Creator: {cairn.sharedByName}</Text>
                 <Text style={styles.attributionMeta}>
                   Shared with you{cairn.sharedAt ? ` on ${formatDate(cairn.sharedAt)}` : ''}
                 </Text>
@@ -406,15 +403,17 @@ export default function CairnDetail() {
                 </View>
                 <Text style={styles.sectionTitle}>Visit History</Text>
               </View>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel="Log visit"
-                onPress={() => router.push(`/cairn/${id}/visit/new`)}
-                style={({ pressed }) => [styles.logVisitButton, pressed && styles.pressed]}
-              >
-                <Feather name="plus" size={16} color={colors.white} />
-                <Text style={styles.logVisitText}>Log Visit</Text>
-              </Pressable>
+              {cairn.visitLogs.length > 0 ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Log visit"
+                  onPress={() => router.push(`/cairn/${id}/visit/new`)}
+                  style={({ pressed }) => [styles.logVisitButton, pressed && styles.pressed]}
+                >
+                  <Feather name="plus" size={16} color={colors.white} />
+                  <Text style={styles.logVisitText}>Log Visit</Text>
+                </Pressable>
+              ) : null}
             </View>
             {cairn.visitLogs.length > 0 ? (
               <View style={styles.visitList}>
@@ -505,24 +504,88 @@ export default function CairnDetail() {
             </View>
           ) : null}
 
-          <View style={styles.actions}>
-            <Pressable accessibilityRole="button" onPress={() => router.push(`/cairn/${id}/edit`)} style={styles.iconButton}>
-              <Feather name="edit-3" size={20} color={colors.ink} />
-              <Text style={styles.actionLabel}>Edit</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={() => router.push(`/cairn/${id}/share`)} style={styles.iconButton}>
-              <Feather name="share-2" size={20} color={colors.ink} />
-              <Text style={styles.actionLabel}>Share</Text>
-            </Pressable>
-            <Pressable accessibilityRole="button" onPress={confirmDelete} style={styles.iconButton}>
-              <Feather name="trash-2" size={20} color={colors.danger} />
-              <Text style={[styles.actionLabel, styles.deleteLabel]}>Delete</Text>
-            </Pressable>
-          </View>
-          <Button label="Back to Cairn" variant="secondary" onPress={() => router.replace('/map')} />
+          <Button label="Back to Cairn" variant="secondary" onPress={() => router.replace(`/map?cairn=${id}`)} />
         </View>
       </ScrollView>
 
+      <Modal
+        animationType="fade"
+        transparent
+        visible={actionMenuOpen}
+        onRequestClose={() => setActionMenuOpen(false)}
+      >
+        <Pressable style={styles.actionBackdrop} onPress={() => setActionMenuOpen(false)} />
+        <View style={[styles.actionSheet, { paddingBottom: Math.max(insets.bottom + spacing.md, spacing.lg) }]}>
+          <View style={styles.actionHandle} />
+          <View style={styles.actionHeader}>
+            <View style={styles.actionTitleBlock}>
+              <Text style={styles.actionTitle}>{cairn.name}</Text>
+              <Text style={styles.actionSubtitle}>Cairn actions</Text>
+            </View>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Close actions"
+              onPress={() => setActionMenuOpen(false)}
+              style={styles.actionClose}
+            >
+              <Feather name="x" size={22} color={colors.ink} />
+            </Pressable>
+          </View>
+          <View style={styles.actionList}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Share Cairn"
+              onPress={() => {
+                setActionMenuOpen(false);
+                router.push(`/cairn/${id}/share`);
+              }}
+              style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
+            >
+              <View style={styles.actionIcon}>
+                <Feather name="share-2" size={18} color={colors.moss} />
+              </View>
+              <View style={styles.actionRowText}>
+                <Text style={styles.actionRowTitle}>Share Cairn</Text>
+                <Text style={styles.actionRowHelp}>Create a private .cairn package</Text>
+              </View>
+              <Feather name="chevron-right" size={20} color={colors.muted} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Edit Cairn"
+              onPress={() => {
+                setActionMenuOpen(false);
+                router.push(`/cairn/${id}/edit`);
+              }}
+              style={({ pressed }) => [styles.actionRow, pressed && styles.pressed]}
+            >
+              <View style={styles.actionIcon}>
+                <Feather name="edit-3" size={18} color={colors.moss} />
+              </View>
+              <View style={styles.actionRowText}>
+                <Text style={styles.actionRowTitle}>Edit Cairn</Text>
+                <Text style={styles.actionRowHelp}>Update details, photos, tags, and notes</Text>
+              </View>
+              <Feather name="chevron-right" size={20} color={colors.muted} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Delete Cairn"
+              onPress={confirmDelete}
+              style={({ pressed }) => [styles.actionRow, styles.actionRowDanger, pressed && styles.pressed]}
+            >
+              <View style={[styles.actionIcon, styles.actionIconDanger]}>
+                <Feather name="trash-2" size={18} color={colors.danger} />
+              </View>
+              <View style={styles.actionRowText}>
+                <Text style={[styles.actionRowTitle, styles.actionDangerText]}>Delete Cairn</Text>
+                <Text style={styles.actionRowHelp}>Remove this place from your journal</Text>
+              </View>
+              <Feather name="chevron-right" size={20} color={colors.muted} />
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
       <Modal
         animationType="fade"
         transparent
@@ -960,27 +1023,101 @@ const styles = StyleSheet.create({
     height: 104,
     borderRadius: 8,
   },
-  actions: {
-    flexDirection: 'row',
-    gap: spacing.sm,
-  },
-  iconButton: {
-    minHeight: 52,
+  actionBackdrop: {
     flex: 1,
+    backgroundColor: 'rgba(32, 40, 34, 0.28)',
+  },
+  actionSheet: {
+    position: 'absolute',
+    left: spacing.md,
+    right: spacing.md,
+    bottom: spacing.md,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.white,
+    borderColor: 'rgba(49, 86, 66, 0.16)',
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.md,
+  },
+  actionHandle: {
+    width: 40,
+    height: 4,
+    borderRadius: 2,
+    alignSelf: 'center',
+    backgroundColor: colors.line,
+    marginTop: spacing.xs,
+  },
+  actionHeader: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  actionTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+  },
+  actionTitle: {
+    color: colors.ink,
+    fontSize: type.heading,
+    fontWeight: '900',
+  },
+  actionSubtitle: {
+    color: colors.muted,
+    fontSize: type.small,
+    fontWeight: '700',
+    marginTop: 2,
+  },
+  actionClose: {
+    width: 44,
+    height: 44,
     alignItems: 'center',
     justifyContent: 'center',
-    flexDirection: 'row',
+  },
+  actionList: {
     gap: spacing.sm,
   },
-  actionLabel: {
-    color: colors.ink,
-    fontWeight: '800',
+  actionRow: {
+    minHeight: 68,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
+    backgroundColor: colors.white,
+    padding: spacing.sm,
   },
-  deleteLabel: {
+  actionRowDanger: {
+    borderColor: 'rgba(158, 61, 50, 0.16)',
+  },
+  actionIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(203, 216, 198, 0.44)',
+  },
+  actionIconDanger: {
+    backgroundColor: 'rgba(158, 61, 50, 0.1)',
+  },
+  actionRowText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  actionRowTitle: {
+    color: colors.ink,
+    fontSize: type.body,
+    fontWeight: '900',
+  },
+  actionRowHelp: {
+    color: colors.muted,
+    fontSize: type.small,
+    lineHeight: 18,
+    marginTop: 2,
+  },
+  actionDangerText: {
     color: colors.danger,
   },
   photoViewer: {
