@@ -40,6 +40,7 @@ const FALLBACK_REGION = {
 const CAIRN_MARKER_IMAGE = require('../assets/markers/cairn-badge.png');
 const CAIRN_MARKER_FAVORITE_IMAGE = require('../assets/markers/cairn-badge-favorite.png');
 const CAIRN_MARKER_SELECTED_IMAGE = require('../assets/markers/cairn-badge-selected.png');
+type MenuFilter = 'all' | 'recent' | 'favorites';
 
 function regionForCairn(cairn: Cairn) {
   return {
@@ -93,7 +94,7 @@ export default function MapHome() {
   const insets = useSafeAreaInsets();
   const [mainMenuOpen, setMainMenuOpen] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [menuFilter, setMenuFilter] = useState<'all' | 'favorites'>('all');
+  const [menuFilter, setMenuFilter] = useState<MenuFilter>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCairnId, setSelectedCairnId] = useState<string | null>(focusedCairnId ?? null);
   const [lastSelectionLoaded, setLastSelectionLoaded] = useState(false);
@@ -106,10 +107,17 @@ export default function MapHome() {
   const selectedCairn = cairns.find((cairn) => cairn.id === selectedCairnId);
   const initialRegion = selectedCairn ? regionForCairn(selectedCairn) : FALLBACK_REGION;
   const mapReady = lastSelectionLoaded && (!selectedCairnId || !!selectedCairn || !loading);
+  const favoriteCount = cairns.filter((cairn) => cairn.isFavorite).length;
+  const latestVisitedCairn = cairns.reduce<Cairn | null>((latest, cairn) => {
+    if (!latest) return cairn;
+    return Date.parse(cairn.lastVisitedAt) > Date.parse(latest.lastVisitedAt) ? cairn : latest;
+  }, null);
   const trimmedSearchQuery = searchQuery.trim().toLowerCase();
   const visibleMenuCairns = (menuFilter === 'favorites'
     ? cairns.filter((cairn) => cairn.isFavorite)
-    : cairns)
+    : menuFilter === 'recent'
+      ? [...cairns].sort((a, b) => Date.parse(b.lastVisitedAt) - Date.parse(a.lastVisitedAt))
+      : cairns)
     .filter((cairn) => {
       if (!trimmedSearchQuery) return true;
 
@@ -894,38 +902,90 @@ export default function MapHome() {
               </Pressable>
             ) : null}
           </View>
+          <View style={styles.placesSummary}>
+            <View style={styles.placesSummaryItem}>
+              <Text style={styles.placesSummaryValue}>{cairns.length}</Text>
+              <Text style={styles.placesSummaryLabel}>Saved</Text>
+            </View>
+            <View style={styles.placesSummaryDivider} />
+            <View style={styles.placesSummaryItem}>
+              <Text style={styles.placesSummaryValue}>{favoriteCount}</Text>
+              <Text style={styles.placesSummaryLabel}>Favorites</Text>
+            </View>
+            <View style={styles.placesSummaryDivider} />
+            <View style={styles.placesSummaryLatest}>
+              <Text style={styles.placesSummaryLabel}>Latest</Text>
+              <Text numberOfLines={1} style={styles.placesSummaryLatestName}>
+                {latestVisitedCairn?.name ?? 'None yet'}
+              </Text>
+            </View>
+          </View>
           <View style={styles.filterRow}>
             <Pressable
               accessibilityRole="button"
               accessibilityState={{ selected: menuFilter === 'all' }}
+              accessibilityLabel="Show all places"
               onPress={() => setMenuFilter('all')}
               style={[styles.filterButton, menuFilter === 'all' && styles.filterButtonSelected]}
             >
-              <Text style={[styles.filterLabel, menuFilter === 'all' && styles.filterLabelSelected]}>All</Text>
+              <Text style={[styles.filterLabel, menuFilter === 'all' && styles.filterLabelSelected]}>
+                All ({cairns.length})
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityState={{ selected: menuFilter === 'recent' }}
+              accessibilityLabel="Show recently visited places"
+              onPress={() => setMenuFilter('recent')}
+              style={[styles.filterButton, menuFilter === 'recent' && styles.filterButtonSelected]}
+            >
+              <Text style={[styles.filterLabel, menuFilter === 'recent' && styles.filterLabelSelected]}>
+                Recent
+              </Text>
             </Pressable>
             <Pressable
               accessibilityRole="button"
               accessibilityState={{ selected: menuFilter === 'favorites' }}
+              accessibilityLabel="Show favorite places"
               onPress={() => setMenuFilter('favorites')}
               style={[styles.filterButton, menuFilter === 'favorites' && styles.filterButtonSelected]}
             >
-              <Text style={[styles.filterLabel, menuFilter === 'favorites' && styles.filterLabelSelected]}>Favorites</Text>
+              <Text style={[styles.filterLabel, menuFilter === 'favorites' && styles.filterLabelSelected]}>
+                Favorites
+              </Text>
             </Pressable>
           </View>
           {cairns.length === 0 ? (
             <View style={styles.menuEmpty}>
+              <View style={styles.menuEmptyIcon}>
+                <CairnMarker />
+              </View>
               <Text style={styles.panelTitle}>No Cairns yet.</Text>
               <Text style={styles.panelText}>Build your first Cairn to get started.</Text>
+              <Button label="Build Cairn" onPress={startBuildCairn} style={styles.menuEmptyButton} />
             </View>
           ) : visibleMenuCairns.length === 0 ? (
             <View style={styles.menuEmpty}>
+              <View style={styles.menuEmptyIcon}>
+                <Feather
+                  name={trimmedSearchQuery ? 'search' : menuFilter === 'favorites' ? 'star' : 'clock'}
+                  size={24}
+                  color={colors.moss}
+                />
+              </View>
               <Text style={styles.panelTitle}>
-                {trimmedSearchQuery ? 'No matching places.' : 'No favorite places yet.'}
+                {trimmedSearchQuery
+                  ? 'No matching places.'
+                  : menuFilter === 'favorites'
+                    ? 'No favorite places yet.'
+                    : 'No recent places yet.'}
               </Text>
               <Text style={styles.panelText}>
                 {trimmedSearchQuery
                   ? 'Try a place name, story, note, or place type.'
-                  : 'Star the places you always want close at hand.'}
+                  : menuFilter === 'favorites'
+                    ? 'Star the places you always want close at hand.'
+                    : 'Log a visit to build your recent history.'}
               </Text>
             </View>
           ) : (
@@ -938,7 +998,11 @@ export default function MapHome() {
                   accessibilityRole="button"
                   accessibilityLabel={`Open ${item.name}`}
                   onPress={() => openCairn(item)}
-                  style={({ pressed }) => [styles.cairnRow, pressed && styles.pressed]}
+                  style={({ pressed }) => [
+                    styles.cairnRow,
+                    item.id === selectedCairnId && styles.cairnRowSelected,
+                    pressed && styles.pressed,
+                  ]}
                 >
                   {heroPhotoFor(item)?.localUri ? (
                     <Image source={{ uri: heroPhotoFor(item)?.localUri }} style={styles.cairnPhoto} />
@@ -947,6 +1011,7 @@ export default function MapHome() {
                       <CairnMarker />
                     </View>
                   )}
+                  {item.id === selectedCairnId ? <View style={styles.cairnSelectedDot} /> : null}
                   <View style={styles.cairnRowText}>
                     <Text numberOfLines={1} style={styles.cairnName}>
                       {item.name}
@@ -1547,6 +1612,48 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  placesSummary: {
+    minHeight: 58,
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
+    backgroundColor: 'rgba(203, 216, 198, 0.22)',
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  placesSummaryItem: {
+    width: 74,
+    alignItems: 'center',
+  },
+  placesSummaryValue: {
+    color: colors.ink,
+    fontSize: 18,
+    fontWeight: '900',
+  },
+  placesSummaryLabel: {
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  placesSummaryDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: 'rgba(49, 86, 66, 0.12)',
+  },
+  placesSummaryLatest: {
+    flex: 1,
+    minWidth: 0,
+    paddingLeft: spacing.sm,
+  },
+  placesSummaryLatestName: {
+    color: colors.ink,
+    fontSize: type.small,
+    fontWeight: '900',
+    marginTop: 2,
+  },
   filterRow: {
     flexDirection: 'row',
     gap: spacing.xs,
@@ -1658,11 +1765,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: spacing.sm,
   },
+  menuEmptyIcon: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(203, 216, 198, 0.28)',
+  },
+  menuEmptyButton: {
+    minWidth: 170,
+    marginTop: spacing.xs,
+  },
   menuList: {
     paddingBottom: spacing.md,
     gap: spacing.sm,
   },
   cairnRow: {
+    position: 'relative',
     minHeight: 88,
     borderRadius: 8,
     backgroundColor: colors.white,
@@ -1672,6 +1792,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.md,
+  },
+  cairnRowSelected: {
+    borderColor: 'rgba(178, 120, 75, 0.38)',
+    backgroundColor: 'rgba(203, 216, 198, 0.22)',
   },
   cairnPhoto: {
     width: 56,
@@ -1685,6 +1809,17 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.cream,
+  },
+  cairnSelectedDot: {
+    position: 'absolute',
+    left: spacing.sm + 46,
+    top: spacing.sm + 4,
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: colors.clay,
+    borderWidth: 2,
+    borderColor: colors.paper,
   },
   cairnRowText: {
     flex: 1,
