@@ -483,7 +483,25 @@ export default function CairnDetail() {
               </View>
               <Text style={styles.sectionTitle}>Story</Text>
             </View>
-            <Text style={styles.storyText}>{cairn.story || 'No story yet.'}</Text>
+            {cairn.story ? (
+              <Text style={styles.storyText}>{cairn.story}</Text>
+            ) : (
+              <View style={styles.emptyJournalBlock}>
+                <Text style={styles.emptyJournalTitle}>What made this place worth saving?</Text>
+                <Text style={styles.emptyJournalText}>
+                  Add the memory, feeling, or small moment that made this Cairn matter.
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Add story"
+                  onPress={() => router.push(`/cairn/${id}/edit`)}
+                  style={({ pressed }) => [styles.emptyInlineButton, pressed && styles.pressed]}
+                >
+                  <Feather name="edit-3" size={15} color={colors.moss} />
+                  <Text style={styles.emptyInlineButtonText}>Add Story</Text>
+                </Pressable>
+              </View>
+            )}
           </View>
 
           <View style={styles.card}>
@@ -528,7 +546,9 @@ export default function CairnDetail() {
                   <Feather name="book-open" size={22} color={colors.moss} />
                 </View>
                 <Text style={styles.emptyTitle}>{"Start this place's history."}</Text>
-                <Text style={styles.emptyText}>Log what happened the next time you return, or add a past visit you want to remember.</Text>
+                <Text style={styles.emptyText}>
+                  Each return trip becomes another page in this place journal.
+                </Text>
                 <Button label="Log Visit" onPress={() => router.push(`/cairn/${id}/visit/new`)} />
               </View>
             )}
@@ -561,7 +581,21 @@ export default function CairnDetail() {
                 })}
               </View>
             ) : (
-              <Text style={styles.notesText}>No reference notes yet.</Text>
+              <View style={styles.emptyReferenceBlock}>
+                <Text style={styles.emptyReferenceText}>
+                  Save the practical details for next time: road access, cell service, water, toilets, campsites, or
+                  things to bring.
+                </Text>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Add reference notes"
+                  onPress={() => router.push(`/cairn/${id}/edit`)}
+                  style={({ pressed }) => [styles.emptyInlineButton, pressed && styles.pressed]}
+                >
+                  <Feather name="clipboard" size={15} color={colors.moss} />
+                  <Text style={styles.emptyInlineButtonText}>Add Reference Notes</Text>
+                </Pressable>
+              </View>
             )}
           </View>
 
@@ -596,7 +630,32 @@ export default function CairnDetail() {
                 ))}
               </ScrollView>
             </View>
-          ) : null}
+          ) : (
+            <View style={styles.card}>
+              <View style={styles.sectionHeader}>
+                <View style={styles.sectionIcon}>
+                  <Feather name="image" size={17} color={colors.moss} />
+                </View>
+                <Text style={styles.sectionTitle}>Photos</Text>
+              </View>
+              <View style={styles.emptyPhotoBlock}>
+                <View style={styles.emptyPhotoIcon}>
+                  <Feather name="camera" size={20} color={colors.moss} />
+                </View>
+                <View style={styles.emptyPhotoText}>
+                  <Text style={styles.emptyJournalTitle}>Add a memory you can see.</Text>
+                  <Text style={styles.emptyJournalText}>
+                    A trail sign, camp setup, view, or tiny detail can bring this place back later.
+                  </Text>
+                </View>
+              </View>
+              <Button
+                label="Add Photos"
+                variant="secondary"
+                onPress={() => router.push(`/cairn/${id}/edit?section=photos`)}
+              />
+            </View>
+          )}
 
           <Button label="Back to Cairn" variant="secondary" onPress={() => router.replace(`/map?cairn=${id}`)} />
         </View>
@@ -1119,6 +1178,36 @@ const styles = StyleSheet.create({
     lineHeight: 29,
     fontWeight: '600',
   },
+  emptyJournalBlock: {
+    gap: spacing.sm,
+  },
+  emptyJournalTitle: {
+    color: colors.ink,
+    fontSize: type.body,
+    fontWeight: '900',
+  },
+  emptyJournalText: {
+    color: colors.muted,
+    fontSize: type.small,
+    lineHeight: 21,
+  },
+  emptyInlineButton: {
+    minHeight: 36,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.16)',
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.sm,
+  },
+  emptyInlineButtonText: {
+    color: colors.moss,
+    fontSize: type.small,
+    fontWeight: '900',
+  },
   logVisitButton: {
     minHeight: 38,
     flexDirection: 'row',
@@ -1288,6 +1377,38 @@ const styles = StyleSheet.create({
     color: colors.muted,
     lineHeight: 22,
     textAlign: 'center',
+  },
+  emptyReferenceBlock: {
+    gap: spacing.sm,
+    borderRadius: 8,
+    backgroundColor: 'rgba(203, 216, 198, 0.16)',
+    padding: spacing.sm,
+  },
+  emptyReferenceText: {
+    color: colors.muted,
+    fontSize: type.small,
+    lineHeight: 21,
+  },
+  emptyPhotoBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 8,
+    backgroundColor: 'rgba(203, 216, 198, 0.16)',
+    padding: spacing.sm,
+  },
+  emptyPhotoIcon: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.paper,
+  },
+  emptyPhotoText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
   },
   notesFormatted: {
     gap: 7,

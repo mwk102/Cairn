@@ -580,8 +580,8 @@ export default function MapHome() {
         ) : cairns.length === 0 ? (
           <View style={styles.panel}>
             <View style={styles.menuHandle} />
-            <Text style={styles.panelTitle}>No Cairns yet.</Text>
-            <Text style={styles.panelText}>Build your first Cairn to get started.</Text>
+            <Text style={styles.panelTitle}>No places saved yet.</Text>
+            <Text style={styles.panelText}>Drop your first Cairn somewhere you want to remember.</Text>
             <Button label="Build Cairn" onPress={() => router.push('/cairn/build')} style={styles.emptyButton} />
           </View>
         ) : selectedCairn ? (
@@ -1049,8 +1049,8 @@ export default function MapHome() {
               <View style={styles.menuEmptyIcon}>
                 <CairnMarker />
               </View>
-              <Text style={styles.panelTitle}>No Cairns yet.</Text>
-              <Text style={styles.panelText}>Build your first Cairn to get started.</Text>
+              <Text style={styles.panelTitle}>No places saved yet.</Text>
+              <Text style={styles.panelText}>Start with a campsite, viewpoint, trailhead, or anywhere worth finding again.</Text>
               <Button label="Build Cairn" onPress={startBuildCairn} style={styles.menuEmptyButton} />
             </View>
           ) : visibleMenuCairns.length === 0 ? (
@@ -1064,17 +1064,17 @@ export default function MapHome() {
               </View>
               <Text style={styles.panelTitle}>
                 {trimmedSearchQuery
-                  ? 'No matching places.'
+                  ? 'No places found.'
                   : menuFilter === 'favorites'
-                    ? 'No favorite places yet.'
-                    : 'No recent places yet.'}
+                    ? 'No favorites yet.'
+                    : 'No recent visits yet.'}
               </Text>
               <Text style={styles.panelText}>
                 {trimmedSearchQuery
-                  ? 'Try a place name, story, note, or place type.'
+                  ? 'Try a place name, tag, story, reference note, or place type.'
                   : menuFilter === 'favorites'
-                    ? 'Star the places you always want close at hand.'
-                    : 'Log a visit to build your recent history.'}
+                    ? 'Star the places you want close at hand.'
+                    : 'Log a visit when you return to a place and it will appear here.'}
               </Text>
             </View>
           ) : (
