@@ -406,75 +406,77 @@ export default function CairnDetail() {
         </View>
 
         <View style={styles.body}>
-          <View style={styles.titleRow}>
-            <View style={styles.titleWrap}>
-              <Text style={styles.title}>{cairn.name}</Text>
-              <Text style={styles.placeType}>{PLACE_TYPE_ICONS[cairn.placeType]} {cairn.placeType}</Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel={cairn.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-              onPress={toggleFavorite}
-              style={({ pressed }) => [styles.favoriteButton, pressed && styles.pressed]}
-            >
-              <Animated.View style={{ transform: [{ scale: favoritePop }] }}>
-                <MaterialIcons
-                  name={cairn.isFavorite ? 'star' : 'star-border'}
-                  size={30}
-                  color={cairn.isFavorite ? colors.clay : colors.muted}
-                />
-              </Animated.View>
-              <Text style={styles.favoriteText}>Favorite</Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.quickDetails}>
-            <View style={styles.quickItem}>
-              <Feather name="calendar" size={19} color={colors.moss} />
-              <Text style={styles.detailLabel}>Built</Text>
-              <Text style={styles.detailValue}>{formatDate(cairn.createdAt)}</Text>
-            </View>
-            <View style={styles.quickItem}>
-              <Feather name="compass" size={19} color={colors.moss} />
-              <Text style={styles.detailLabel}>Last Visited</Text>
-              <Text style={styles.detailValue}>{formatDate(cairn.lastVisitedAt)}</Text>
-            </View>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Copy saved coordinates"
-              onPress={copyCoordinates}
-              style={({ pressed }) => [styles.quickItem, pressed && styles.pressed]}
-            >
-              <Feather name="map-pin" size={19} color={colors.moss} />
-              <Text style={styles.detailLabel}>Coordinates</Text>
-              <View style={styles.coordinateCopyRow}>
-                <Text style={styles.coordinateText}>{formatCoordinates(cairn)}</Text>
-                <Feather name="copy" size={13} color={colors.moss} />
+          <View style={styles.placeSummaryCard}>
+            <View style={styles.titleRow}>
+              <View style={styles.titleWrap}>
+                <Text style={styles.title}>{cairn.name}</Text>
+                <Text style={styles.placeType}>{PLACE_TYPE_ICONS[cairn.placeType]} {cairn.placeType}</Text>
               </View>
-            </Pressable>
-          </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={cairn.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                onPress={toggleFavorite}
+                style={({ pressed }) => [styles.favoriteButton, pressed && styles.pressed]}
+              >
+                <Animated.View style={{ transform: [{ scale: favoritePop }] }}>
+                  <MaterialIcons
+                    name={cairn.isFavorite ? 'star' : 'star-border'}
+                    size={30}
+                    color={cairn.isFavorite ? colors.clay : colors.muted}
+                  />
+                </Animated.View>
+                <Text style={styles.favoriteText}>Favorite</Text>
+              </Pressable>
+            </View>
 
-          {cairn.tags.length > 0 ? (
-            <View style={styles.tagsBlock}>
-              {cairn.tags.map((tag) => (
-                <View key={tag} style={styles.tagChip}>
-                  <Text style={styles.tagChipText}>{tag}</Text>
+            {cairn.tags.length > 0 ? (
+              <View style={styles.tagsBlock}>
+                {cairn.tags.map((tag) => (
+                  <View key={tag} style={styles.tagChip}>
+                    <Text style={styles.tagChipText}>{tag}</Text>
+                  </View>
+                ))}
+              </View>
+            ) : null}
+
+            <View style={styles.quickDetails}>
+              <View style={styles.quickItem}>
+                <Feather name="calendar" size={17} color={colors.moss} />
+                <Text style={styles.detailLabel}>Built</Text>
+                <Text style={styles.detailValue}>{formatDate(cairn.createdAt)}</Text>
+              </View>
+              <View style={styles.quickItem}>
+                <Feather name="compass" size={17} color={colors.moss} />
+                <Text style={styles.detailLabel}>Last Visited</Text>
+                <Text style={styles.detailValue}>{formatDate(cairn.lastVisitedAt)}</Text>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Copy saved coordinates"
+                onPress={copyCoordinates}
+                style={({ pressed }) => [styles.quickItem, pressed && styles.pressed]}
+              >
+                <Feather name="map-pin" size={17} color={colors.moss} />
+                <Text style={styles.detailLabel}>Coordinates</Text>
+                <View style={styles.coordinateCopyRow}>
+                  <Text style={styles.coordinateText}>{formatCoordinates(cairn)}</Text>
+                  <Feather name="copy" size={13} color={colors.moss} />
                 </View>
-              ))}
+              </Pressable>
             </View>
-          ) : null}
 
-          {cairn.sharedByName ? (
-            <View style={styles.attributionCard}>
-              <Feather name="user" size={18} color={colors.moss} />
-              <View style={styles.attributionText}>
-                <Text style={styles.attributionTitle}>Creator: {cairn.sharedByName}</Text>
-                <Text style={styles.attributionMeta}>
-                  Shared with you{cairn.sharedAt ? ` on ${formatDate(cairn.sharedAt)}` : ''}
-                </Text>
+            {cairn.sharedByName ? (
+              <View style={styles.attributionCard}>
+                <Feather name="user" size={18} color={colors.moss} />
+                <View style={styles.attributionText}>
+                  <Text style={styles.attributionTitle}>Creator: {cairn.sharedByName}</Text>
+                  <Text style={styles.attributionMeta}>
+                    Shared with you{cairn.sharedAt ? ` on ${formatDate(cairn.sharedAt)}` : ''}
+                  </Text>
+                </View>
               </View>
-            </View>
-          ) : null}
+            ) : null}
+          </View>
 
           <View style={styles.storyCard}>
             <View style={styles.sectionHeader}>
@@ -484,7 +486,10 @@ export default function CairnDetail() {
               <Text style={styles.sectionTitle}>Story</Text>
             </View>
             {cairn.story ? (
-              <Text style={styles.storyText}>{cairn.story}</Text>
+              <View style={styles.storyQuote}>
+                <View style={styles.storyQuoteRule} />
+                <Text style={styles.storyText}>{cairn.story}</Text>
+              </View>
             ) : (
               <View style={styles.emptyJournalBlock}>
                 <Text style={styles.emptyJournalTitle}>What made this place worth saving?</Text>
@@ -504,7 +509,7 @@ export default function CairnDetail() {
             )}
           </View>
 
-          <View style={styles.card}>
+          <View style={[styles.card, styles.historyCard]}>
             <View style={styles.sectionHeaderRow}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionIcon}>
@@ -554,7 +559,7 @@ export default function CairnDetail() {
             )}
           </View>
 
-          <View style={styles.card}>
+          <View style={[styles.card, styles.referenceCard]}>
             <View style={styles.sectionHeader}>
               <View style={styles.sectionIcon}>
                 <Feather name="clipboard" size={17} color={colors.moss} />
@@ -600,7 +605,7 @@ export default function CairnDetail() {
           </View>
 
           {cairn.photos.length > 0 ? (
-            <View style={styles.card}>
+            <View style={[styles.card, styles.photosCard]}>
               <View style={styles.sectionHeaderRow}>
                 <View style={styles.sectionHeader}>
                   <View style={styles.sectionIcon}>
@@ -631,7 +636,7 @@ export default function CairnDetail() {
               </ScrollView>
             </View>
           ) : (
-            <View style={styles.card}>
+            <View style={[styles.card, styles.photosCard]}>
               <View style={styles.sectionHeader}>
                 <View style={styles.sectionIcon}>
                   <Feather name="image" size={17} color={colors.moss} />
@@ -1014,6 +1019,14 @@ const styles = StyleSheet.create({
   },
   body: {
     padding: spacing.md,
+    gap: spacing.lg,
+  },
+  placeSummaryCard: {
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
+    backgroundColor: 'rgba(255, 253, 250, 0.92)',
+    padding: spacing.md,
     gap: spacing.md,
   },
   titleRow: {
@@ -1030,11 +1043,12 @@ const styles = StyleSheet.create({
     color: colors.ink,
     fontSize: type.title,
     fontWeight: '900',
+    lineHeight: 36,
   },
   placeType: {
     color: colors.moss,
     fontWeight: '900',
-    marginTop: spacing.xs,
+    marginTop: 3,
   },
   favoriteButton: {
     minWidth: 72,
@@ -1050,19 +1064,22 @@ const styles = StyleSheet.create({
   },
   quickDetails: {
     flexDirection: 'row',
-    gap: spacing.sm,
+    gap: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(49, 86, 66, 0.1)',
+    paddingTop: spacing.sm,
   },
   quickItem: {
     flex: 1,
-    minHeight: 92,
+    minHeight: 74,
     minWidth: 0,
     justifyContent: 'center',
     gap: 3,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.line,
-    backgroundColor: colors.paper,
-    paddingHorizontal: spacing.sm,
+    borderColor: 'rgba(49, 86, 66, 0.1)',
+    backgroundColor: 'rgba(250, 248, 243, 0.66)',
+    paddingHorizontal: spacing.xs,
   },
   detailLabel: {
     color: colors.muted,
@@ -1090,6 +1107,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
+    marginTop: -spacing.xs,
   },
   tagChip: {
     minHeight: 28,
@@ -1109,15 +1127,15 @@ const styles = StyleSheet.create({
     includeFontPadding: false,
   },
   attributionCard: {
-    minHeight: 64,
+    minHeight: 58,
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: 'rgba(178, 120, 75, 0.25)',
-    backgroundColor: 'rgba(255, 253, 250, 0.86)',
-    padding: spacing.md,
+    backgroundColor: 'rgba(178, 120, 75, 0.08)',
+    padding: spacing.sm,
   },
   attributionText: {
     flex: 1,
@@ -1135,7 +1153,7 @@ const styles = StyleSheet.create({
   card: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: colors.line,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
     backgroundColor: colors.paper,
     padding: spacing.md,
     gap: spacing.md,
@@ -1143,10 +1161,19 @@ const styles = StyleSheet.create({
   storyCard: {
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: 'rgba(49, 86, 66, 0.14)',
-    backgroundColor: 'rgba(203, 216, 198, 0.28)',
-    padding: spacing.md,
+    borderColor: 'rgba(49, 86, 66, 0.18)',
+    backgroundColor: 'rgba(203, 216, 198, 0.32)',
+    padding: spacing.lg,
     gap: spacing.md,
+  },
+  historyCard: {
+    backgroundColor: 'rgba(255, 253, 250, 0.96)',
+  },
+  referenceCard: {
+    backgroundColor: 'rgba(255, 253, 250, 0.82)',
+  },
+  photosCard: {
+    backgroundColor: 'rgba(255, 253, 250, 0.9)',
   },
   sectionHeader: {
     flexDirection: 'row',
@@ -1172,11 +1199,23 @@ const styles = StyleSheet.create({
     fontSize: type.heading,
     fontWeight: '900',
   },
+  storyQuote: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: spacing.md,
+  },
+  storyQuoteRule: {
+    width: 4,
+    borderRadius: 2,
+    backgroundColor: colors.clay,
+    opacity: 0.7,
+  },
   storyText: {
     color: colors.ink,
-    fontSize: 18,
-    lineHeight: 29,
-    fontWeight: '600',
+    fontSize: 19,
+    lineHeight: 31,
+    fontWeight: '500',
+    flex: 1,
   },
   emptyJournalBlock: {
     gap: spacing.sm,
