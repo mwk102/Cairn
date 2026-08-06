@@ -49,8 +49,10 @@ export default function CairnDetail() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const photoListRef = useRef<FlatList<Cairn['photos'][number]>>(null);
   const [cairn, setCairn] = useState<Cairn | null>(null);
   const [viewingPhotoIndex, setViewingPhotoIndex] = useState<number | null>(null);
+  const [viewingVisit, setViewingVisit] = useState<VisitLog | null>(null);
   const [showAllVisits, setShowAllVisits] = useState(false);
   const [actionMenuOpen, setActionMenuOpen] = useState(false);
   const [clearing, setClearing] = useState(false);
@@ -245,13 +247,36 @@ export default function CairnDetail() {
     setActionMenuOpen(true);
   }
 
+  function viewPhotoAt(index: number, animated = true) {
+    setViewingPhotoIndex(index);
+    photoListRef.current?.scrollToIndex({ index, animated });
+  }
+
+  function showPreviousPhoto() {
+    if (!cairn || viewingPhotoIndex === null || cairn.photos.length <= 1) return;
+    viewPhotoAt((viewingPhotoIndex - 1 + cairn.photos.length) % cairn.photos.length);
+  }
+
+  function showNextPhoto() {
+    if (!cairn || viewingPhotoIndex === null || cairn.photos.length <= 1) return;
+    viewPhotoAt((viewingPhotoIndex + 1) % cairn.photos.length);
+  }
+
+  function editViewingVisit() {
+    if (!viewingVisit) return;
+
+    const visitId = viewingVisit.id;
+    setViewingVisit(null);
+    router.push(`/cairn/${id}/visit/${visitId}/edit`);
+  }
+
   function renderVisit(visit: VisitLog, isLast: boolean) {
     const isLatest = cairn?.visitLogs[0]?.id === visit.id;
 
     return (
       <Animated.View
         accessibilityRole="button"
-        accessibilityLabel={`Edit visit from ${formatDate(visit.visitDate)}`}
+        accessibilityLabel={`Read visit from ${formatDate(visit.visitDate)}`}
         key={visit.id}
         style={[
           styles.visitRow,
@@ -266,8 +291,8 @@ export default function CairnDetail() {
       >
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel={`Edit visit from ${formatDate(visit.visitDate)}`}
-          onPress={() => router.push(`/cairn/${id}/visit/${visit.id}/edit`)}
+          accessibilityLabel={`Read visit from ${formatDate(visit.visitDate)}`}
+          onPress={() => setViewingVisit(visit)}
           style={({ pressed }) => [styles.visitPressable, pressed && styles.pressed]}
         >
           <View style={styles.timeline}>
@@ -285,7 +310,7 @@ export default function CairnDetail() {
                 <Text style={styles.visitDate}>{formatDate(visit.visitDate)}</Text>
               </View>
               <View style={styles.visitEditHint}>
-                <Feather name="edit-3" size={14} color={colors.moss} />
+                <Feather name="book-open" size={14} color={colors.moss} />
               </View>
             </View>
             <Text style={styles.visitNotes}>{previewText(visit.notes)}</Text>
@@ -502,7 +527,7 @@ export default function CairnDetail() {
                 <View style={styles.emptyVisitIcon}>
                   <Feather name="book-open" size={22} color={colors.moss} />
                 </View>
-                <Text style={styles.emptyTitle}>Start this place&apos;s history.</Text>
+                <Text style={styles.emptyTitle}>{"Start this place's history."}</Text>
                 <Text style={styles.emptyText}>Log what happened the next time you return, or add a past visit you want to remember.</Text>
                 <Button label="Log Visit" onPress={() => router.push(`/cairn/${id}/visit/new`)} />
               </View>
@@ -658,33 +683,164 @@ export default function CairnDetail() {
       <Modal
         animationType="fade"
         transparent
+        visible={viewingVisit !== null}
+        onRequestClose={() => setViewingVisit(null)}
+      >
+        <View style={[styles.visitViewerOverlay, { paddingTop: insets.top + spacing.lg }]}>
+          <Pressable style={styles.visitViewerBackdrop} onPress={() => setViewingVisit(null)} />
+          {viewingVisit ? (
+            <View style={styles.visitViewerSheet}>
+              <View style={styles.visitViewerHeader}>
+                <View style={styles.visitViewerTitleBlock}>
+                  <View style={styles.visitViewerIcon}>
+                    <Feather name="book-open" size={17} color={colors.moss} />
+                  </View>
+                  <View style={styles.visitViewerTitleText}>
+                    <Text style={styles.visitViewerEyebrow}>Visit</Text>
+                    <Text style={styles.visitViewerDate}>{formatDate(viewingVisit.visitDate)}</Text>
+                  </View>
+                </View>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Close visit"
+                  onPress={() => setViewingVisit(null)}
+                  style={styles.actionClose}
+                >
+                  <Feather name="x" size={22} color={colors.ink} />
+                </Pressable>
+              </View>
+              <View style={styles.visitViewerRule} />
+              <ScrollView contentContainerStyle={styles.visitViewerContent}>
+                <Text style={styles.visitViewerNotes}>{viewingVisit.notes.trim() || 'No notes for this visit.'}</Text>
+                {viewingVisit.photos.length > 0 ? (
+                  <ScrollView
+                    horizontal
+                    showsHorizontalScrollIndicator={false}
+                    contentContainerStyle={styles.visitViewerPhotos}
+                  >
+                    {viewingVisit.photos.map((photo) => {
+                      const photoIndex = cairn.photos.findIndex((item) => item.id === photo.id);
+
+                      return (
+                        <Pressable
+                          accessibilityRole="imagebutton"
+                          accessibilityLabel="View visit photo"
+                          key={photo.id}
+                          onPress={() => {
+                            setViewingVisit(null);
+                            if (photoIndex >= 0) setViewingPhotoIndex(photoIndex);
+                          }}
+                        >
+                          <Image source={{ uri: photo.localUri }} resizeMode="cover" style={styles.visitViewerPhoto} />
+                        </Pressable>
+                      );
+                    })}
+                  </ScrollView>
+                ) : null}
+              </ScrollView>
+              <View style={styles.visitViewerActions}>
+                <Button label="Edit Visit" variant="secondary" onPress={editViewingVisit} />
+              </View>
+            </View>
+          ) : null}
+        </View>
+      </Modal>
+      <Modal
+        animationType="fade"
+        transparent
         visible={viewingPhotoIndex !== null}
         onRequestClose={() => setViewingPhotoIndex(null)}
       >
         <View style={styles.photoViewer}>
+          <View style={[styles.viewerTopBar, { paddingTop: insets.top + spacing.sm }]}>
+            <View style={styles.viewerTitleBlock}>
+              <Text numberOfLines={1} style={styles.viewerPlaceName}>
+                {cairn.name}
+              </Text>
+              <Text style={styles.viewerCount}>
+                {viewingPhotoIndex !== null ? `${viewingPhotoIndex + 1} of ${cairn.photos.length}` : ''}
+              </Text>
+            </View>
+          </View>
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Close photo"
             onPress={() => setViewingPhotoIndex(null)}
-            style={styles.viewerClose}
+            style={[styles.viewerClose, { top: insets.top + spacing.sm }]}
           >
             <Feather name="x" size={26} color={colors.white} />
           </Pressable>
+          {cairn.photos.length > 1 ? (
+            <>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Previous photo"
+                onPress={showPreviousPhoto}
+                style={[styles.viewerStepZone, styles.viewerPreviousZone]}
+              >
+                <View style={styles.viewerStepButton}>
+                  <Feather name="chevron-left" size={24} color={colors.white} />
+                </View>
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Next photo"
+                onPress={showNextPhoto}
+                style={[styles.viewerStepZone, styles.viewerNextZone]}
+              >
+                <View style={styles.viewerStepButton}>
+                  <Feather name="chevron-right" size={24} color={colors.white} />
+                </View>
+              </Pressable>
+            </>
+          ) : null}
           {viewingPhotoIndex !== null ? (
             <FlatList
+              ref={photoListRef}
               data={cairn.photos}
               horizontal
               pagingEnabled
               initialScrollIndex={viewingPhotoIndex}
+              extraData={viewingPhotoIndex}
               keyExtractor={(photo) => photo.id}
               getItemLayout={(_, index) => ({ length: width, offset: width * index, index })}
               showsHorizontalScrollIndicator={false}
+              onScrollToIndexFailed={({ index }) => {
+                window.setTimeout(() => viewPhotoAt(index, false), 80);
+              }}
+              onMomentumScrollEnd={(event) => {
+                const nextIndex = Math.round(event.nativeEvent.contentOffset.x / width);
+                setViewingPhotoIndex(nextIndex);
+              }}
               renderItem={({ item }) => (
                 <View style={[styles.viewerPage, { width }]}>
                   <Image source={{ uri: item.localUri }} style={styles.viewerImage} resizeMode="contain" />
                 </View>
               )}
             />
+          ) : null}
+          {cairn.photos.length > 1 ? (
+            <View style={[styles.viewerThumbDock, { paddingBottom: Math.max(insets.bottom, spacing.sm) }]}>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.viewerThumbStrip}>
+                {cairn.photos.map((photo, index) => (
+                  <Pressable
+                    accessibilityRole="imagebutton"
+                    accessibilityLabel={`View photo ${index + 1}`}
+                    key={photo.id}
+                    onPress={() => viewPhotoAt(index)}
+                  >
+                    <Image
+                      source={{ uri: photo.localUri }}
+                      resizeMode="cover"
+                      style={[
+                        styles.viewerThumb,
+                        index === viewingPhotoIndex && styles.viewerThumbSelected,
+                      ]}
+                    />
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
           ) : null}
         </View>
       </Modal>
@@ -1271,21 +1427,161 @@ const styles = StyleSheet.create({
   actionDangerText: {
     color: colors.danger,
   },
+  visitViewerOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xl,
+  },
+  visitViewerBackdrop: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(32, 40, 34, 0.42)',
+  },
+  visitViewerSheet: {
+    maxHeight: '78%',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.18)',
+    backgroundColor: colors.paper,
+    paddingHorizontal: spacing.md,
+    paddingTop: spacing.md,
+    paddingBottom: spacing.md,
+    shadowColor: colors.ink,
+    shadowOpacity: 0.22,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 10 },
+    elevation: 10,
+  },
+  visitViewerHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: spacing.md,
+  },
+  visitViewerTitleBlock: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  visitViewerIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(203, 216, 198, 0.5)',
+  },
+  visitViewerTitleText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  visitViewerEyebrow: {
+    color: colors.moss,
+    fontSize: type.small,
+    fontWeight: '900',
+    textTransform: 'uppercase',
+  },
+  visitViewerDate: {
+    color: colors.ink,
+    fontSize: type.heading,
+    fontWeight: '900',
+    marginTop: 2,
+  },
+  visitViewerRule: {
+    height: 1,
+    backgroundColor: 'rgba(49, 86, 66, 0.12)',
+    marginTop: spacing.md,
+    marginBottom: spacing.md,
+  },
+  visitViewerContent: {
+    gap: spacing.md,
+    paddingBottom: spacing.md,
+  },
+  visitViewerNotes: {
+    color: colors.ink,
+    fontSize: type.body,
+    lineHeight: 26,
+  },
+  visitViewerPhotos: {
+    gap: spacing.sm,
+  },
+  visitViewerPhoto: {
+    width: 120,
+    height: 120,
+    borderRadius: 8,
+  },
+  visitViewerActions: {
+    paddingTop: spacing.md,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(49, 86, 66, 0.1)',
+  },
   photoViewer: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: 'rgba(32, 40, 34, 0.96)',
   },
+  viewerTopBar: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 3,
+    minHeight: 88,
+    justifyContent: 'flex-end',
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.sm,
+    backgroundColor: 'rgba(6, 18, 13, 0.36)',
+  },
+  viewerTitleBlock: {
+    paddingRight: 64,
+  },
+  viewerPlaceName: {
+    color: colors.white,
+    fontSize: type.body,
+    fontWeight: '900',
+  },
+  viewerCount: {
+    color: 'rgba(255, 253, 250, 0.72)',
+    fontSize: type.small,
+    fontWeight: '800',
+    marginTop: 2,
+  },
   viewerClose: {
     position: 'absolute',
     top: spacing.xl,
     right: spacing.md,
-    zIndex: 1,
+    zIndex: 4,
     width: 48,
     height: 48,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  viewerStepZone: {
+    position: 'absolute',
+    top: 100,
+    bottom: 112,
+    zIndex: 2,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.sm,
+  },
+  viewerPreviousZone: {
+    left: 0,
+  },
+  viewerNextZone: {
+    right: 0,
+  },
+  viewerStepButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(6, 18, 13, 0.34)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 253, 250, 0.18)',
   },
   viewerImage: {
     width: '100%',
@@ -1295,6 +1591,31 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  viewerThumbDock: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: 0,
+    zIndex: 3,
+    paddingTop: spacing.sm,
+    backgroundColor: 'rgba(6, 18, 13, 0.4)',
+  },
+  viewerThumbStrip: {
+    gap: spacing.xs,
+    paddingHorizontal: spacing.md,
+  },
+  viewerThumb: {
+    width: 52,
+    height: 52,
+    borderRadius: 8,
+    opacity: 0.58,
+    borderWidth: 2,
+    borderColor: 'transparent',
+  },
+  viewerThumbSelected: {
+    opacity: 1,
+    borderColor: colors.white,
   },
   clearOverlay: {
     flex: 1,

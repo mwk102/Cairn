@@ -107,7 +107,7 @@ export function VisitLogForm({ initial, submitLabel, onSubmit, onDelete }: Props
           <View style={styles.introText}>
             <Text style={styles.title}>{editing ? 'Edit Visit' : 'Log Visit'}</Text>
             <Text style={styles.help}>
-              {editing ? 'Refine this page in the place journal.' : 'Add another page to this place&apos;s history.'}
+              {editing ? 'Refine this page in the place journal.' : "Add another page to this place's history."}
             </Text>
           </View>
         </View>

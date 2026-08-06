@@ -6,12 +6,14 @@ import {
   Easing,
   FlatList,
   Image,
+  Keyboard,
   Linking,
   Modal,
   Pressable,
   StyleSheet,
   Text,
   TextInput,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import MapView, { Circle, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
@@ -82,6 +84,7 @@ function BuildCairnGlyph() {
 
 export default function MapHome() {
   const { menu, cairn: focusedCairnId } = useLocalSearchParams<{ menu?: string; cairn?: string }>();
+  const { height: windowHeight } = useWindowDimensions();
   const mapRef = useRef<MapView>(null);
   const searchInputRef = useRef<TextInput>(null);
   const searchFocusTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -104,9 +107,16 @@ export default function MapHome() {
   const [rippleOpacity, setRippleOpacity] = useState(0);
   const [migrationBusy, setMigrationBusy] = useState(false);
   const [filterWidth, setFilterWidth] = useState(0);
+  const [searchFocused, setSearchFocusedState] = useState(false);
+  const [keyboardTop, setKeyboardTop] = useState<number | null>(null);
   const { cairns, loading, error, reload } = useCairns();
   const { coordinate, permissionDenied, requestLocation } = useCurrentLocation();
   const mapAvailable = canUseNativeMap();
+  const normalMenuHeight = Math.round(windowHeight * 0.76);
+  const searchMenuHeight = keyboardTop
+    ? Math.max(430, Math.min(normalMenuHeight, keyboardTop - insets.top - spacing.sm))
+    : normalMenuHeight;
+  const menuDrawerHeight = searchFocused ? searchMenuHeight : normalMenuHeight;
   const selectedCairn = cairns.find((cairn) => cairn.id === selectedCairnId);
   const initialRegion = selectedCairn ? regionForCairn(selectedCairn) : FALLBACK_REGION;
   const mapReady = lastSelectionLoaded && (!selectedCairnId || !!selectedCairn || !loading);
@@ -136,6 +146,20 @@ export default function MapHome() {
   useEffect(() => {
     requestLocation();
   }, [requestLocation]);
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
+      setKeyboardTop(event.endCoordinates.screenY);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardTop(null);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -234,6 +258,7 @@ export default function MapHome() {
   }, [filterMotion, menuFilter]);
 
   function setSearchFocused(focused: boolean) {
+    setSearchFocusedState(focused);
     Animated.timing(searchGlow, {
       toValue: focused ? 1 : 0,
       duration: 180,
@@ -627,9 +652,6 @@ export default function MapHome() {
                     </Text>
                   </View>
                 </View>
-                <View style={styles.previewActionColumn}>
-                  <Feather name="chevron-right" size={18} color={colors.muted} />
-                </View>
               </View>
               {previewMemoryFor(selectedCairn) ? (
                 <View style={styles.previewMemoryBand}>
@@ -793,9 +815,13 @@ export default function MapHome() {
               <Feather name="chevron-right" size={20} color={colors.muted} />
             </Pressable>
           </View>
+          {__DEV__ ? (
           <View style={styles.migrationBox}>
             <View style={styles.migrationText}>
-              <Text style={styles.migrationTitle}>Move local Cairns</Text>
+              <View style={styles.devToolHeader}>
+                <Text style={styles.devToolBadge}>Dev Tool</Text>
+                <Text style={styles.migrationTitle}>Move local Cairns</Text>
+              </View>
               <Text style={styles.migrationHelp}>Copy in Expo Go, paste in the APK.</Text>
             </View>
             <View style={styles.migrationActions}>
@@ -829,6 +855,7 @@ export default function MapHome() {
               </Pressable>
             </View>
           </View>
+          ) : null}
         </View>
       </Modal>
       <Modal
@@ -842,6 +869,8 @@ export default function MapHome() {
           style={[
             styles.menuSheet,
             {
+              height: menuDrawerHeight,
+              maxHeight: menuDrawerHeight,
               paddingBottom: Math.max(insets.bottom, spacing.sm),
               opacity: menuSlide,
               transform: [
@@ -952,7 +981,7 @@ export default function MapHome() {
             </View>
             <View style={styles.placesSummaryDivider} />
             <View style={styles.placesSummaryLatest}>
-              <Text style={styles.placesSummaryLabel}>Latest</Text>
+              <Text style={styles.placesSummaryLabel}>Last Visited</Text>
               <Text numberOfLines={1} style={styles.placesSummaryLatestName}>
                 {latestVisitedCairn?.name ?? 'None yet'}
               </Text>
@@ -1052,7 +1081,12 @@ export default function MapHome() {
             <FlatList
               data={visibleMenuCairns}
               keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.menuList}
+              keyboardShouldPersistTaps="handled"
+              style={styles.menuResultsList}
+              contentContainerStyle={[
+                styles.menuList,
+                searchFocused && styles.menuListSearching,
+              ]}
               renderItem={({ item }) => (
                 <Pressable
                   accessibilityRole="button"
@@ -1462,10 +1496,6 @@ const styles = StyleSheet.create({
     fontSize: 13,
     flexShrink: 1,
   },
-  previewActionColumn: {
-    width: 24,
-    alignItems: 'center',
-  },
   previewMemory: {
     color: colors.ink,
     fontSize: type.small,
@@ -1606,7 +1636,6 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    maxHeight: '76%',
     borderTopLeftRadius: 8,
     borderTopRightRadius: 8,
     backgroundColor: colors.paper,
@@ -1774,6 +1803,22 @@ const styles = StyleSheet.create({
     fontSize: type.small,
     fontWeight: '900',
   },
+  devToolHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  devToolBadge: {
+    overflow: 'hidden',
+    borderRadius: 999,
+    backgroundColor: 'rgba(178, 120, 75, 0.16)',
+    color: colors.clay,
+    fontSize: 10,
+    fontWeight: '900',
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+    textTransform: 'uppercase',
+  },
   migrationHelp: {
     color: colors.muted,
     fontSize: 12,
@@ -1850,6 +1895,12 @@ const styles = StyleSheet.create({
   menuList: {
     paddingBottom: spacing.md,
     gap: spacing.sm,
+  },
+  menuResultsList: {
+    flex: 1,
+  },
+  menuListSearching: {
+    paddingBottom: 120,
   },
   cairnRow: {
     position: 'relative',
