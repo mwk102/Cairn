@@ -555,146 +555,186 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
         {permissionDenied ? (
           <Text style={styles.help}>Location permission is off. You can still paste coordinates or choose the place on the map.</Text>
         ) : null}
-        <Text style={styles.sectionEyebrow}>Place</Text>
-        <View onLayout={(event) => {
-          nameTopRef.current = event.nativeEvent.layout.y;
-        }}>
-          <Field
-            label="Name this place"
-            value={name}
-            onChangeText={setName}
-            onFocus={scrollNameIntoView}
-            placeholder="e.g. Riverside Camp"
-            error={error ?? undefined}
-          />
-        </View>
-        <View style={styles.group}>
-          <Text style={styles.label}>Place type</Text>
-          <PlaceTypePicker value={placeType} onChange={setPlaceType} />
-        </View>
-        <Text style={styles.sectionEyebrow}>Journal</Text>
-        <View onLayout={(event) => {
-          storyTopRef.current = event.nativeEvent.layout.y;
-        }}>
-          <Field
-            label="Story"
-            value={story}
-            onChangeText={setStory}
-            onFocus={scrollStoryIntoView}
-            placeholder="Why did this place matter?"
-            multiline
-            maxLength={800}
-            style={styles.story}
-          />
-          <Text style={styles.fieldHint}>The memory you want this Cairn to carry.</Text>
-        </View>
-        <View onLayout={(event) => {
-          notesTopRef.current = event.nativeEvent.layout.y;
-        }}>
-          <Field
-            label="Reference Notes"
-            value={notes}
-            onChangeText={setNotes}
-            onFocus={scrollNotesIntoView}
-            placeholder={'- Rough road\n- Cell Service\n- Toilets, fire rings...'}
-            multiline
-            maxLength={500}
-            style={styles.notes}
-          />
-          <Text style={styles.fieldHint}>Practical details for next time. Bullets work well here.</Text>
-        </View>
-        <Text style={styles.sectionEyebrow}>Details</Text>
-        <View style={styles.group}>
-          <Text style={styles.label}>Tags</Text>
-          {tags.length > 0 ? (
-            <View style={styles.tagList}>
-              {tags.map((tag) => (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Remove ${tag} tag`}
-                  key={tag}
-                  onPress={() => removeTag(tag)}
-                  style={({ pressed }) => [styles.tagChip, pressed && styles.pressed]}
-                >
-                  <Text style={styles.tagText}>{tag}</Text>
-                  <Feather name="x" size={14} color={colors.moss} />
-                </Pressable>
-              ))}
+        <View style={styles.formSection}>
+          <View style={styles.formSectionHeader}>
+            <View style={styles.formSectionIcon}>
+              <Feather name="map-pin" size={16} color={colors.moss} />
             </View>
-          ) : (
-            <View style={styles.suggestionList}>
-              {TAG_SUGGESTIONS.map((suggestion) => (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={`Use ${suggestion} tag`}
-                  key={suggestion}
-                  onPress={() => setTagInput(suggestion)}
-                  style={({ pressed }) => [styles.suggestionChip, pressed && styles.pressed]}
-                >
-                  <Text style={styles.suggestionText}>{suggestion}</Text>
-                </Pressable>
-              ))}
+            <View style={styles.formSectionText}>
+              <Text style={styles.formSectionTitle}>Place</Text>
+              <Text style={styles.formSectionHelp}>Name it the way you would look for it later.</Text>
             </View>
-          )}
-          <View style={styles.tagInputRow}>
+          </View>
+          <View onLayout={(event) => {
+            nameTopRef.current = event.nativeEvent.layout.y;
+          }}>
             <Field
-              label="Add tag"
-              value={tagInput}
-              onChangeText={setTagInput}
-              onSubmitEditing={addTagsFromInput}
-              onBlur={addTagsFromInput}
-              placeholder="4x4 access, toilets, Cell Service"
-              autoCapitalize="none"
-              autoCorrect={false}
-              containerStyle={styles.tagField}
-              returnKeyType="done"
+              label="Name this place"
+              value={name}
+              onChangeText={setName}
+              onFocus={scrollNameIntoView}
+              placeholder="e.g. Riverside Camp"
+              error={error ?? undefined}
             />
-            <Pressable
-              accessibilityRole="button"
-              accessibilityLabel="Add tag"
-              onPress={addTagsFromInput}
-              style={({ pressed }) => [styles.tagAddButton, pressed && styles.pressed]}
-            >
-              <Feather name="plus" size={18} color={colors.white} />
-            </Pressable>
           </View>
-        </View>
-        <View onLayout={(event) => {
-          photosTopRef.current = event.nativeEvent.layout.y;
-          maybeScrollToInitialPhotos();
-        }} style={styles.group}>
-          <Text style={styles.label}>Photos</Text>
-          <PhotoStrip photos={photos} onChange={setPhotos} />
-        </View>
-        {initial && photos.length > 0 ? (
           <View style={styles.group}>
-            <Text style={styles.label}>Hero photo</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heroOptions}>
-              {photos
-                .map((localUri) => {
-                  const selected = localUri === (primaryPhotoUri ?? photos[0]);
-                  return (
-                    <Pressable
-                      accessibilityRole="button"
-                      accessibilityState={{ selected }}
-                      accessibilityLabel="Choose hero photo"
-                      key={localUri}
-                      onPress={() => setPrimaryPhotoUri(localUri)}
-                      style={[styles.heroOption, selected && styles.heroOptionSelected]}
-                    >
-                      <Image source={{ uri: localUri }} style={styles.heroOptionImage} />
-                      {selected ? (
-                        <View style={styles.heroSelectedBadge}>
-                          <Feather name="check" size={16} color={colors.white} />
-                        </View>
-                      ) : null}
-                    </Pressable>
-                  );
-                })}
-            </ScrollView>
-            <Text style={styles.help}>Choose which uploaded photo appears at the top of this Cairn.</Text>
+            <Text style={styles.label}>Place type</Text>
+            <PlaceTypePicker value={placeType} onChange={setPlaceType} />
           </View>
-        ) : null}
+        </View>
+        <View style={[styles.formSection, styles.journalSection]}>
+          <View style={styles.formSectionHeader}>
+            <View style={styles.formSectionIcon}>
+              <Feather name="book-open" size={16} color={colors.moss} />
+            </View>
+            <View style={styles.formSectionText}>
+              <Text style={styles.formSectionTitle}>Journal</Text>
+              <Text style={styles.formSectionHelp}>Separate the memory from the practical reminders.</Text>
+            </View>
+          </View>
+          <View onLayout={(event) => {
+            storyTopRef.current = event.nativeEvent.layout.y;
+          }}>
+            <Field
+              label="Story"
+              value={story}
+              onChangeText={setStory}
+              onFocus={scrollStoryIntoView}
+              placeholder="Why did this place matter?"
+              multiline
+              maxLength={800}
+              style={styles.story}
+            />
+            <Text style={styles.fieldHint}>The lasting memory: what happened here, who was there, why it stuck.</Text>
+          </View>
+          <View onLayout={(event) => {
+            notesTopRef.current = event.nativeEvent.layout.y;
+          }}>
+            <Field
+              label="Reference Notes"
+              value={notes}
+              onChangeText={setNotes}
+              onFocus={scrollNotesIntoView}
+              placeholder={'- Rough road\n- Cell Service\n- Toilets, fire rings...'}
+              multiline
+              maxLength={500}
+              style={styles.notes}
+            />
+            <Text style={styles.fieldHint}>Stable details for next time. Bullets work well here.</Text>
+          </View>
+        </View>
+        <View style={styles.formSection}>
+          <View style={styles.formSectionHeader}>
+            <View style={styles.formSectionIcon}>
+              <Feather name="tag" size={16} color={colors.moss} />
+            </View>
+            <View style={styles.formSectionText}>
+              <Text style={styles.formSectionTitle}>Tags</Text>
+              <Text style={styles.formSectionHelp}>Quick labels for filtering and scanning your places.</Text>
+            </View>
+          </View>
+          <View style={styles.group}>
+            {tags.length > 0 ? (
+              <View style={styles.tagList}>
+                {tags.map((tag) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Remove ${tag} tag`}
+                    key={tag}
+                    onPress={() => removeTag(tag)}
+                    style={({ pressed }) => [styles.tagChip, pressed && styles.pressed]}
+                  >
+                    <Text style={styles.tagText}>{tag}</Text>
+                    <Feather name="x" size={14} color={colors.moss} />
+                  </Pressable>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.suggestionList}>
+                {TAG_SUGGESTIONS.map((suggestion) => (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel={`Use ${suggestion} tag`}
+                    key={suggestion}
+                    onPress={() => setTagInput(suggestion)}
+                    style={({ pressed }) => [styles.suggestionChip, pressed && styles.pressed]}
+                  >
+                    <Text style={styles.suggestionText}>{suggestion}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            )}
+            <View style={styles.tagInputRow}>
+              <Field
+                label="Add tag"
+                value={tagInput}
+                onChangeText={setTagInput}
+                onSubmitEditing={addTagsFromInput}
+                onBlur={addTagsFromInput}
+                placeholder="4x4 access, toilets, Cell Service"
+                autoCapitalize="none"
+                autoCorrect={false}
+                containerStyle={styles.tagField}
+                returnKeyType="done"
+              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel="Add tag"
+                onPress={addTagsFromInput}
+                style={({ pressed }) => [styles.tagAddButton, pressed && styles.pressed]}
+              >
+                <Feather name="plus" size={18} color={colors.white} />
+              </Pressable>
+            </View>
+          </View>
+        </View>
+        <View
+          onLayout={(event) => {
+            photosTopRef.current = event.nativeEvent.layout.y;
+            maybeScrollToInitialPhotos();
+          }}
+          style={styles.formSection}
+        >
+          <View style={styles.formSectionHeader}>
+            <View style={styles.formSectionIcon}>
+              <Feather name="image" size={16} color={colors.moss} />
+            </View>
+            <View style={styles.formSectionText}>
+              <Text style={styles.formSectionTitle}>Photos</Text>
+              <Text style={styles.formSectionHelp}>Add the views, signs, setups, and small details you want to remember.</Text>
+            </View>
+          </View>
+          <PhotoStrip photos={photos} onChange={setPhotos} />
+          {initial && photos.length > 0 ? (
+            <View style={styles.heroPhotoBlock}>
+              <Text style={styles.label}>Hero photo</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.heroOptions}>
+                {photos
+                  .map((localUri) => {
+                    const selected = localUri === (primaryPhotoUri ?? photos[0]);
+                    return (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityState={{ selected }}
+                        accessibilityLabel="Choose hero photo"
+                        key={localUri}
+                        onPress={() => setPrimaryPhotoUri(localUri)}
+                        style={[styles.heroOption, selected && styles.heroOptionSelected]}
+                      >
+                        <Image source={{ uri: localUri }} style={styles.heroOptionImage} />
+                        {selected ? (
+                          <View style={styles.heroSelectedBadge}>
+                            <Feather name="check" size={16} color={colors.white} />
+                          </View>
+                        ) : null}
+                      </Pressable>
+                    );
+                  })}
+              </ScrollView>
+              <Text style={styles.help}>Choose which uploaded photo appears at the top of this Cairn.</Text>
+            </View>
+          ) : null}
+        </View>
         <View style={styles.favoriteRow}>
           <View>
             <Text style={styles.label}>Favorite</Text>
@@ -838,6 +878,46 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginTop: spacing.md,
     marginBottom: -spacing.xs,
+  },
+  formSection: {
+    gap: spacing.md,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
+    backgroundColor: colors.paper,
+    padding: spacing.md,
+    marginTop: spacing.md,
+  },
+  journalSection: {
+    backgroundColor: 'rgba(203, 216, 198, 0.18)',
+  },
+  formSectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+  },
+  formSectionIcon: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(203, 216, 198, 0.58)',
+  },
+  formSectionText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  formSectionTitle: {
+    color: colors.ink,
+    fontSize: type.body,
+    fontWeight: '900',
+  },
+  formSectionHelp: {
+    color: colors.muted,
+    fontSize: type.small,
+    lineHeight: 19,
+    marginTop: 2,
   },
   mapWrap: {
     height: 230,
@@ -1087,6 +1167,12 @@ const styles = StyleSheet.create({
   heroOptions: {
     gap: spacing.sm,
     paddingVertical: spacing.xs,
+  },
+  heroPhotoBlock: {
+    gap: spacing.xs,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(49, 86, 66, 0.1)',
+    paddingTop: spacing.md,
   },
   heroOption: {
     width: 92,
