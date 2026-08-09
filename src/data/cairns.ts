@@ -2,6 +2,7 @@ import * as Crypto from 'expo-crypto';
 
 import { Cairn, CairnInput, CairnPhoto, PLACE_TYPES, PlaceType, VisitLog, VisitLogInput } from '@/types/cairn';
 import { getDb, initDb } from './db';
+import { recordTagSuggestions } from './settings';
 
 type CairnRow = Omit<Cairn, 'isFavorite' | 'photos' | 'placeType' | 'tags' | 'visitLogs'> & {
   isFavorite: number;
@@ -228,6 +229,7 @@ export async function createCairn(input: CairnInput) {
       );
     }
   });
+  await recordTagSuggestions(input.tags);
 
   return id;
 }
@@ -284,6 +286,7 @@ export async function updateCairn(id: string, input: CairnInput) {
       );
     }
   });
+  await recordTagSuggestions(input.tags);
 }
 
 export async function deleteCairn(id: string) {

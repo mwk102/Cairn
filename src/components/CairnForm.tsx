@@ -22,6 +22,7 @@ import { Button } from '@/components/Button';
 import { Field } from '@/components/Field';
 import { PhotoStrip } from '@/components/PhotoStrip';
 import { PlaceTypePicker } from '@/components/PlaceTypePicker';
+import { getTagSuggestions } from '@/data/settings';
 import { Coordinate, useCurrentLocation } from '@/hooks/useCurrentLocation';
 import { colors, spacing, type } from '@/theme';
 import { Cairn, CairnInput, PlaceType } from '@/types/cairn';
@@ -37,7 +38,7 @@ import { existingPhotoUris } from '@/utils/photoStorage';
 
 const FALLBACK_COORDINATE = { latitude: 47.6205, longitude: -122.3493 };
 const CAIRN_MARKER_IMAGE = require('../../assets/markers/cairn-badge.png');
-const TAG_SUGGESTIONS = ['4x4 access', 'toilets', 'Cell Service', 'short hike'];
+const DEFAULT_TAG_SUGGESTIONS = ['4x4 access', 'toilets', 'Cell Service', 'short hike'];
 
 type Props = {
   initial?: Cairn;
@@ -80,6 +81,7 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
   const [notes, setNotes] = useState(initial?.notes ?? '');
   const [tags, setTags] = useState<string[]>(initial?.tags ?? []);
   const [tagInput, setTagInput] = useState('');
+  const [tagSuggestions, setTagSuggestions] = useState<string[]>(DEFAULT_TAG_SUGGESTIONS);
   const [placeType, setPlaceType] = useState<PlaceType>(initial?.placeType ?? 'Campsite');
   const [isFavorite, setIsFavorite] = useState(initial?.isFavorite ?? false);
   const [photos, setPhotos] = useState<string[]>(initial?.photos.map((photo) => photo.localUri) ?? []);
@@ -130,6 +132,24 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
   useEffect(() => {
     mapRef.current?.animateToRegion(region, 350);
   }, [region]);
+
+  useEffect(() => {
+    let active = true;
+
+    getTagSuggestions().then((storedSuggestions) => {
+      if (!active) return;
+      const merged = Array.from(
+        new Map(
+          [...storedSuggestions, ...DEFAULT_TAG_SUGGESTIONS].map((tag) => [tag.toLowerCase(), tag] as const),
+        ).values(),
+      );
+      setTagSuggestions(merged);
+    });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   useEffect(() => {
     if (initial || didInitialLocationRef.current) return;
@@ -303,6 +323,16 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
     setTagInput('');
   }
 
+  function addSuggestedTag(tag: string) {
+    setTags((current) => {
+      if (current.some((existing) => existing.toLowerCase() === tag.toLowerCase())) {
+        return current;
+      }
+
+      return [...current, tag];
+    });
+  }
+
   function removeTag(tagToRemove: string) {
     setTags((current) => current.filter((tag) => tag !== tagToRemove));
   }
@@ -385,6 +415,10 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
     didInitialPhotoFocusRef.current = true;
     scrollPhotosIntoView();
   }
+
+  const availableTagSuggestions = tagSuggestions.filter(
+    (suggestion) => !tags.some((tag) => tag.toLowerCase() === suggestion.toLowerCase()),
+  );
 
   return (
     <KeyboardAvoidingView
@@ -673,21 +707,25 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
                   </Pressable>
                 ))}
               </View>
-            ) : (
-              <View style={styles.suggestionList}>
-                {TAG_SUGGESTIONS.map((suggestion) => (
-                  <Pressable
-                    accessibilityRole="button"
-                    accessibilityLabel={`Use ${suggestion} tag`}
-                    key={suggestion}
-                    onPress={() => setTagInput(suggestion)}
-                    style={({ pressed }) => [styles.suggestionChip, pressed && styles.pressed]}
-                  >
-                    <Text style={styles.suggestionText}>{suggestion}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            )}
+            ) : null}
+            {availableTagSuggestions.length > 0 ? (
+              <>
+                <Text style={styles.quickTagLabel}>Quick add</Text>
+                <View style={styles.suggestionList}>
+                  {availableTagSuggestions.slice(0, 8).map((suggestion) => (
+                    <Pressable
+                      accessibilityRole="button"
+                      accessibilityLabel={`Add ${suggestion} tag`}
+                      key={suggestion}
+                      onPress={() => addSuggestedTag(suggestion)}
+                      style={({ pressed }) => [styles.suggestionChip, pressed && styles.pressed]}
+                    >
+                      <Text style={styles.suggestionText}>{suggestion}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              </>
+            ) : null}
             <View style={styles.tagInputRow}>
               <Field
                 label="Add tag"
@@ -1140,6 +1178,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing.xs,
+  },
+  quickTagLabel: {
+    color: colors.muted,
+    fontSize: type.small,
+    fontWeight: '900',
+    textTransform: 'uppercase',
   },
   suggestionChip: {
     minHeight: 30,
