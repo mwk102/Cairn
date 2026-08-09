@@ -60,11 +60,15 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
   const mapRef = useRef<MapView>(null);
   const chooserMapRef = useRef<MapView>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const placeSectionTopRef = useRef(0);
+  const journalSectionTopRef = useRef(0);
   const nameTopRef = useRef(0);
   const storyTopRef = useRef(0);
   const notesTopRef = useRef(0);
   const photosTopRef = useRef(0);
   const didInitialPhotoFocusRef = useRef(false);
+  const didInitialLocationRef = useRef(false);
+  const userChangedLocationRef = useRef(false);
   const insets = useSafeAreaInsets();
   const { requestLocation, permissionDenied } = useCurrentLocation();
   const mapAvailable = canUseNativeMap();
@@ -100,6 +104,9 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
   const formPrompt = initial ? 'Update the details that help this place stay useful.' : 'Save the place, then let the story grow over time.';
 
   function updateCoordinate(next: Coordinate, changed = true) {
+    if (changed) {
+      userChangedLocationRef.current = true;
+    }
     setCoordinate(next);
     setLocationChanged(changed);
     setLatitudeText(formatCoordinateValue(next.latitude));
@@ -123,6 +130,17 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
   useEffect(() => {
     mapRef.current?.animateToRegion(region, 350);
   }, [region]);
+
+  useEffect(() => {
+    if (initial || didInitialLocationRef.current) return;
+
+    didInitialLocationRef.current = true;
+    requestLocation().then((current) => {
+      if (current && !userChangedLocationRef.current) {
+        updateCoordinate(current, false);
+      }
+    });
+  }, [initial, requestLocation]);
 
   const draftRegion = useMemo(
     () => ({
@@ -329,31 +347,27 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
     }
   }
 
-  function scrollNotesIntoView() {
+  function scrollFieldIntoView(top: number, delay = 260) {
+    if (top <= 0) return;
+
     window.setTimeout(() => {
       scrollRef.current?.scrollTo({
-        y: Math.max(notesTopRef.current - 96, 0),
+        y: Math.max(top - 120, 0),
         animated: true,
       });
-    }, 250);
+    }, delay);
+  }
+
+  function scrollNotesIntoView() {
+    scrollFieldIntoView(journalSectionTopRef.current + notesTopRef.current);
   }
 
   function scrollStoryIntoView() {
-    window.setTimeout(() => {
-      scrollRef.current?.scrollTo({
-        y: Math.max(storyTopRef.current - 96, 0),
-        animated: true,
-      });
-    }, 250);
+    scrollFieldIntoView(journalSectionTopRef.current + storyTopRef.current);
   }
 
   function scrollNameIntoView() {
-    window.setTimeout(() => {
-      scrollRef.current?.scrollTo({
-        y: Math.max(nameTopRef.current - 96, 0),
-        animated: true,
-      });
-    }, 250);
+    scrollFieldIntoView(placeSectionTopRef.current + nameTopRef.current);
   }
 
   function scrollPhotosIntoView() {
@@ -555,7 +569,12 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
         {permissionDenied ? (
           <Text style={styles.help}>Location permission is off. You can still paste coordinates or choose the place on the map.</Text>
         ) : null}
-        <View style={styles.formSection}>
+        <View
+          onLayout={(event) => {
+            placeSectionTopRef.current = event.nativeEvent.layout.y;
+          }}
+          style={styles.formSection}
+        >
           <View style={styles.formSectionHeader}>
             <View style={styles.formSectionIcon}>
               <Feather name="map-pin" size={16} color={colors.moss} />
@@ -582,7 +601,12 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
             <PlaceTypePicker value={placeType} onChange={setPlaceType} />
           </View>
         </View>
-        <View style={[styles.formSection, styles.journalSection]}>
+        <View
+          onLayout={(event) => {
+            journalSectionTopRef.current = event.nativeEvent.layout.y;
+          }}
+          style={[styles.formSection, styles.journalSection]}
+        >
           <View style={styles.formSectionHeader}>
             <View style={styles.formSectionIcon}>
               <Feather name="book-open" size={16} color={colors.moss} />

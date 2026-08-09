@@ -1,4 +1,5 @@
-import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Feather } from '@expo/vector-icons';
 
 import { colors, spacing } from '@/theme';
 import { PLACE_TYPE_ICONS, PLACE_TYPES, PlaceType } from '@/types/cairn';
@@ -10,31 +11,54 @@ type Props = {
 
 export function PlaceTypePicker({ value, onChange }: Props) {
   return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
-      {PLACE_TYPES.map((placeType) => {
-        const selected = placeType === value;
-        return (
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={placeType}
-            accessibilityState={{ selected }}
-            key={placeType}
-            onPress={() => onChange(placeType)}
-            style={[styles.chip, selected && styles.selected]}
-          >
-            <Text style={styles.icon}>{PLACE_TYPE_ICONS[placeType]}</Text>
-            <Text style={[styles.label, selected && styles.selectedLabel]}>{placeType}</Text>
-          </Pressable>
-        );
-      })}
-    </ScrollView>
+    <View style={styles.wrap}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.row}>
+        {PLACE_TYPES.map((placeType) => {
+          const selected = placeType === value;
+          return (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={placeType}
+              accessibilityState={{ selected }}
+              key={placeType}
+              onPress={() => onChange(placeType)}
+              style={[styles.chip, selected && styles.selected]}
+            >
+              <Text style={styles.icon}>{PLACE_TYPE_ICONS[placeType]}</Text>
+              <Text style={[styles.label, selected && styles.selectedLabel]}>{placeType}</Text>
+            </Pressable>
+          );
+        })}
+      </ScrollView>
+      <View pointerEvents="none" style={styles.scrollHint}>
+        <Feather name="chevron-right" size={18} color={colors.moss} />
+      </View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  wrap: {
+    position: 'relative',
+  },
   row: {
     gap: spacing.sm,
+    paddingRight: 38,
     paddingVertical: spacing.xs,
+  },
+  scrollHint: {
+    position: 'absolute',
+    right: 0,
+    top: spacing.xs,
+    bottom: spacing.xs,
+    width: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderTopRightRadius: 8,
+    borderBottomRightRadius: 8,
+    backgroundColor: 'rgba(250, 248, 243, 0.88)',
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.12)',
   },
   chip: {
     minHeight: 44,

@@ -114,7 +114,7 @@ export default function MapHome() {
   const mapAvailable = canUseNativeMap();
   const normalMenuHeight = Math.round(windowHeight * 0.76);
   const searchMenuHeight = keyboardTop
-    ? Math.max(430, Math.min(normalMenuHeight, keyboardTop - insets.top - spacing.sm))
+    ? Math.max(320, Math.min(Math.round(windowHeight * 0.9), keyboardTop - insets.top - spacing.sm))
     : normalMenuHeight;
   const menuDrawerHeight = searchFocused ? searchMenuHeight : normalMenuHeight;
   const selectedCairn = cairns.find((cairn) => cairn.id === selectedCairnId);
@@ -969,81 +969,93 @@ export default function MapHome() {
               </Pressable>
             ) : null}
           </Animated.View>
-          <View style={styles.placesSummary}>
-            <View style={styles.placesSummaryItem}>
-              <Text style={styles.placesSummaryValue}>{cairns.length}</Text>
-              <Text style={styles.placesSummaryLabel}>Saved</Text>
-            </View>
-            <View style={styles.placesSummaryDivider} />
-            <View style={styles.placesSummaryItem}>
-              <Text style={styles.placesSummaryValue}>{favoriteCount}</Text>
-              <Text style={styles.placesSummaryLabel}>Favorites</Text>
-            </View>
-            <View style={styles.placesSummaryDivider} />
-            <View style={styles.placesSummaryLatest}>
-              <Text style={styles.placesSummaryLabel}>Last Visited</Text>
-              <Text numberOfLines={1} style={styles.placesSummaryLatestName}>
-                {latestVisitedCairn?.name ?? 'None yet'}
+          {searchFocused ? (
+            <View style={styles.searchModeRow}>
+              <Text style={styles.searchModeText}>
+                {trimmedSearchQuery
+                  ? `${visibleMenuCairns.length} ${visibleMenuCairns.length === 1 ? 'place' : 'places'} found`
+                  : 'Start typing to narrow your places'}
               </Text>
             </View>
-          </View>
-          <View
-            style={styles.filterRow}
-            onLayout={(event) => setFilterWidth(event.nativeEvent.layout.width)}
-          >
-            {filterWidth > 0 ? (
-              <Animated.View
-                pointerEvents="none"
-                style={[
-                  styles.filterIndicator,
-                  {
-                    width: (filterWidth - 6) / 3,
-                    transform: [
+          ) : (
+            <>
+              <View style={styles.placesSummary}>
+                <View style={styles.placesSummaryItem}>
+                  <Text style={styles.placesSummaryValue}>{cairns.length}</Text>
+                  <Text style={styles.placesSummaryLabel}>Saved</Text>
+                </View>
+                <View style={styles.placesSummaryDivider} />
+                <View style={styles.placesSummaryItem}>
+                  <Text style={styles.placesSummaryValue}>{favoriteCount}</Text>
+                  <Text style={styles.placesSummaryLabel}>Favorites</Text>
+                </View>
+                <View style={styles.placesSummaryDivider} />
+                <View style={styles.placesSummaryLatest}>
+                  <Text style={styles.placesSummaryLabel}>Last Visited</Text>
+                  <Text numberOfLines={1} style={styles.placesSummaryLatestName}>
+                    {latestVisitedCairn?.name ?? 'None yet'}
+                  </Text>
+                </View>
+              </View>
+              <View
+                style={styles.filterRow}
+                onLayout={(event) => setFilterWidth(event.nativeEvent.layout.width)}
+              >
+                {filterWidth > 0 ? (
+                  <Animated.View
+                    pointerEvents="none"
+                    style={[
+                      styles.filterIndicator,
                       {
-                        translateX: filterMotion.interpolate({
-                          inputRange: [0, 1, 2],
-                          outputRange: [0, (filterWidth - 6) / 3, ((filterWidth - 6) / 3) * 2],
-                        }),
+                        width: (filterWidth - 6) / 3,
+                        transform: [
+                          {
+                            translateX: filterMotion.interpolate({
+                              inputRange: [0, 1, 2],
+                              outputRange: [0, (filterWidth - 6) / 3, ((filterWidth - 6) / 3) * 2],
+                            }),
+                          },
+                        ],
                       },
-                    ],
-                  },
-                ]}
-              />
-            ) : null}
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ selected: menuFilter === 'all' }}
-              accessibilityLabel="Show all places"
-              onPress={() => setMenuFilter('all')}
-              style={[styles.filterButton, menuFilter === 'all' && styles.filterButtonSelected]}
-            >
-              <Text style={[styles.filterLabel, menuFilter === 'all' && styles.filterLabelSelected]}>
-                All ({cairns.length})
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ selected: menuFilter === 'recent' }}
-              accessibilityLabel="Show recently visited places"
-              onPress={() => setMenuFilter('recent')}
-              style={[styles.filterButton, menuFilter === 'recent' && styles.filterButtonSelected]}
-            >
-              <Text style={[styles.filterLabel, menuFilter === 'recent' && styles.filterLabelSelected]}>
-                Recent
-              </Text>
-            </Pressable>
-            <Pressable
-              accessibilityRole="button"
-              accessibilityState={{ selected: menuFilter === 'favorites' }}
-              accessibilityLabel="Show favorite places"
-              onPress={() => setMenuFilter('favorites')}
-              style={[styles.filterButton, menuFilter === 'favorites' && styles.filterButtonSelected]}
-            >
-              <Text style={[styles.filterLabel, menuFilter === 'favorites' && styles.filterLabelSelected]}>
-                Favorites
-              </Text>
-            </Pressable>
-          </View>
+                    ]}
+                  />
+                ) : null}
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: menuFilter === 'all' }}
+                  accessibilityLabel="Show all places"
+                  onPress={() => setMenuFilter('all')}
+                  style={[styles.filterButton, menuFilter === 'all' && styles.filterButtonSelected]}
+                >
+                  <Text style={[styles.filterLabel, menuFilter === 'all' && styles.filterLabelSelected]}>
+                    All ({cairns.length})
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: menuFilter === 'recent' }}
+                  accessibilityLabel="Show recently visited places"
+                  onPress={() => setMenuFilter('recent')}
+                  style={[styles.filterButton, menuFilter === 'recent' && styles.filterButtonSelected]}
+                >
+                  <Text style={[styles.filterLabel, menuFilter === 'recent' && styles.filterLabelSelected]}>
+                    Recent
+                  </Text>
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: menuFilter === 'favorites' }}
+                  accessibilityLabel="Show favorite places"
+                  onPress={() => setMenuFilter('favorites')}
+                  style={[styles.filterButton, menuFilter === 'favorites' && styles.filterButtonSelected]}
+                >
+                  <Text style={[styles.filterLabel, menuFilter === 'favorites' && styles.filterLabelSelected]}>
+                    Favorites
+                  </Text>
+                </Pressable>
+              </View>
+            </>
+          )}
           {cairns.length === 0 ? (
             <View style={styles.menuEmpty}>
               <View style={styles.menuEmptyIcon}>
@@ -1701,6 +1713,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  searchModeRow: {
+    minHeight: 34,
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: 'rgba(203, 216, 198, 0.18)',
+    paddingHorizontal: spacing.sm,
+    marginBottom: spacing.sm,
+  },
+  searchModeText: {
+    color: colors.muted,
+    fontSize: type.small,
+    fontWeight: '800',
+  },
   placesSummary: {
     minHeight: 58,
     flexDirection: 'row',
@@ -1900,7 +1925,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   menuListSearching: {
-    paddingBottom: 120,
+    paddingBottom: 96,
   },
   cairnRow: {
     position: 'relative',

@@ -20,7 +20,17 @@ export function useCurrentLocation() {
         return null;
       }
       setPermissionDenied(false);
-      const position = await Location.getCurrentPositionAsync({});
+      let position: Location.LocationObject | null = null;
+      try {
+        position = await Location.getCurrentPositionAsync({});
+      } catch {
+        position = await Location.getLastKnownPositionAsync();
+      }
+
+      if (!position) {
+        return null;
+      }
+
       const next = {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,

@@ -57,8 +57,11 @@ export default function ReceiveSharedCairn() {
     try {
       const picked = await File.pickFileAsync();
       const file = Array.isArray(picked) ? picked[0] : picked;
+      if (!file) return;
       await loadPackage(await file.text());
-    } catch {
+    } catch (error) {
+      const message = error instanceof Error ? error.message.toLowerCase() : '';
+      if (message.includes('cancel')) return;
       Alert.alert('Could not open file', 'Choose a .cairn package that was shared from Cairn.');
     } finally {
       setBusy(false);
