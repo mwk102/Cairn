@@ -6,6 +6,7 @@ const ONBOARDING_KEY = 'onboardingComplete';
 const SHARING_DISPLAY_NAME_KEY = 'sharingDisplayName';
 const SHARING_CREATOR_ID_KEY = 'sharingCreatorId';
 const LAST_SELECTED_CAIRN_ID_KEY = 'lastSelectedCairnId';
+const LAST_KNOWN_COORDINATE_KEY = 'lastKnownCoordinate';
 const TAG_SUGGESTIONS_KEY = 'tagSuggestions';
 const MAX_TAG_SUGGESTIONS = 18;
 
@@ -76,6 +77,39 @@ export async function getLastSelectedCairnId() {
 
 export async function setLastSelectedCairnId(cairnId: string) {
   await setSetting(LAST_SELECTED_CAIRN_ID_KEY, cairnId);
+}
+
+export type StoredCoordinate = {
+  latitude: number;
+  longitude: number;
+};
+
+export async function getStoredLastKnownCoordinate(): Promise<StoredCoordinate | null> {
+  const value = await getSetting(LAST_KNOWN_COORDINATE_KEY);
+  if (!value) return null;
+
+  try {
+    const parsed = JSON.parse(value);
+    if (
+      typeof parsed?.latitude !== 'number'
+      || typeof parsed?.longitude !== 'number'
+      || !Number.isFinite(parsed.latitude)
+      || !Number.isFinite(parsed.longitude)
+    ) {
+      return null;
+    }
+
+    return {
+      latitude: parsed.latitude,
+      longitude: parsed.longitude,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function setStoredLastKnownCoordinate(coordinate: StoredCoordinate) {
+  await setSetting(LAST_KNOWN_COORDINATE_KEY, JSON.stringify(coordinate));
 }
 
 function cleanTags(tags: string[]) {

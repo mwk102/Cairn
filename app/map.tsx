@@ -53,6 +53,15 @@ function regionForCairn(cairn: Cairn) {
   };
 }
 
+function regionForCoordinate(coordinate: { latitude: number; longitude: number }) {
+  return {
+    latitude: coordinate.latitude,
+    longitude: coordinate.longitude,
+    latitudeDelta: FALLBACK_REGION.latitudeDelta,
+    longitudeDelta: FALLBACK_REGION.longitudeDelta,
+  };
+}
+
 function CairnBrandMark() {
   return (
     <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={styles.brandMark}>
@@ -88,6 +97,7 @@ export default function MapHome() {
   const mapRef = useRef<MapView>(null);
   const searchInputRef = useRef<TextInput>(null);
   const searchFocusTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didAutoCenterLocationRef = useRef(false);
   const selectionMotion = useRef(new Animated.Value(0)).current;
   const buildButtonScale = useRef(new Animated.Value(1)).current;
   const buildRipple = useRef(new Animated.Value(0)).current;
@@ -111,7 +121,13 @@ export default function MapHome() {
   const [keyboardTop, setKeyboardTop] = useState<number | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { cairns, loading, error, reload } = useCairns();
-  const { coordinate, permissionDenied, requestLocation } = useCurrentLocation();
+  const {
+    coordinate,
+    permissionDenied,
+    locationUnavailable,
+    locationSource,
+    requestLocation,
+  } = useCurrentLocation();
   const mapAvailable = canUseNativeMap();
   const normalMenuHeight = Math.round(windowHeight * 0.76);
   const keyboardOverlaysWindow = keyboardTop !== null && keyboardTop < windowHeight - spacing.lg;
@@ -126,13 +142,26 @@ export default function MapHome() {
     : normalMenuHeight;
   const menuDrawerHeight = searchFocused ? searchMenuHeight : normalMenuHeight;
   const selectedCairn = cairns.find((cairn) => cairn.id === selectedCairnId);
-  const initialRegion = selectedCairn ? regionForCairn(selectedCairn) : FALLBACK_REGION;
-  const mapReady = lastSelectionLoaded && (!selectedCairnId || !!selectedCairn || !loading);
-  const favoriteCount = cairns.filter((cairn) => cairn.isFavorite).length;
   const latestVisitedCairn = cairns.reduce<Cairn | null>((latest, cairn) => {
     if (!latest) return cairn;
     return Date.parse(cairn.lastVisitedAt) > Date.parse(latest.lastVisitedAt) ? cairn : latest;
   }, null);
+  const initialRegion = selectedCairn
+    ? regionForCairn(selectedCairn)
+    : coordinate
+      ? regionForCoordinate(coordinate)
+      : latestVisitedCairn
+        ? regionForCairn(latestVisitedCairn)
+        : FALLBACK_REGION;
+  const mapReady = lastSelectionLoaded && (!selectedCairnId || !!selectedCairn || !loading);
+  const favoriteCount = cairns.filter((cairn) => cairn.isFavorite).length;
+  const locationNotice = permissionDenied
+    ? 'Location is off. Your saved Cairns still work offline.'
+    : locationUnavailable
+      ? locationSource === 'device-last-known' || locationSource === 'stored-last-known'
+        ? 'Using last known location. Saved Cairns still work offline.'
+        : 'Current location is unavailable. Saved Cairns still work offline.'
+      : null;
   const trimmedSearchQuery = searchQuery.trim().toLowerCase();
   const visibleMenuCairns = (menuFilter === 'favorites'
     ? cairns.filter((cairn) => cairn.isFavorite)
@@ -225,6 +254,13 @@ export default function MapHome() {
       setSelectedCairnId(null);
     }
   }, [cairns, selectedCairnId]);
+
+  useEffect(() => {
+    if (!mapReady || selectedCairn || !coordinate || didAutoCenterLocationRef.current) return;
+
+    didAutoCenterLocationRef.current = true;
+    mapRef.current?.animateToRegion(regionForCoordinate(coordinate), 420);
+  }, [coordinate, mapReady, selectedCairn]);
 
   useEffect(() => {
     if (!menuOpen) {
@@ -719,9 +755,9 @@ export default function MapHome() {
               </View>
             </Pressable>
           </Animated.View>
-        ) : permissionDenied ? (
+        ) : locationNotice ? (
           <View style={styles.notice}>
-            <Text style={styles.noticeText}>Location is off. Your Cairns still work.</Text>
+            <Text style={styles.noticeText}>{locationNotice}</Text>
           </View>
         ) : null}
       </View>

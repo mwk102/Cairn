@@ -71,7 +71,12 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
   const didInitialLocationRef = useRef(false);
   const userChangedLocationRef = useRef(false);
   const insets = useSafeAreaInsets();
-  const { requestLocation, permissionDenied } = useCurrentLocation();
+  const {
+    requestLocation,
+    permissionDenied,
+    locationUnavailable,
+    locationSource,
+  } = useCurrentLocation();
   const mapAvailable = canUseNativeMap();
   const [coordinate, setCoordinate] = useState<Coordinate>(
     initial ? { latitude: initial.latitude, longitude: initial.longitude } : FALLBACK_COORDINATE,
@@ -99,11 +104,19 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
   const [locating, setLocating] = useState(false);
   const [chooserOpen, setChooserOpen] = useState(false);
   const [chooserLocating, setChooserLocating] = useState(false);
+  const [chooserLocationError, setChooserLocationError] = useState<string | null>(null);
   const [manualCoordinatesOpen, setManualCoordinatesOpen] = useState(false);
   const [draftCoordinate, setDraftCoordinate] = useState<Coordinate>(coordinate);
   const [draftMoving, setDraftMoving] = useState(false);
   const formTitle = initial ? 'Refine this Cairn' : 'Build Cairn';
   const formPrompt = initial ? 'Update the details that help this place stay useful.' : 'Save the place, then let the story grow over time.';
+  const locationNotice = permissionDenied
+    ? 'Location permission is off. You can still paste coordinates or choose the place on the map.'
+    : locationUnavailable
+      ? locationSource === 'device-last-known' || locationSource === 'stored-last-known'
+        ? 'Using last known location. Confirm the spot before saving if you are offline.'
+        : 'Current location is unavailable. Paste coordinates or choose the place on the map.'
+      : null;
 
   function updateCoordinate(next: Coordinate, changed = true) {
     if (changed) {
@@ -253,6 +266,7 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
 
   function openChooser() {
     Keyboard.dismiss();
+    setChooserLocationError(null);
     setDraftCoordinate(coordinate);
     setChooserOpen(true);
   }
@@ -284,12 +298,16 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
 
   async function useCurrentLocationInChooser() {
     setChooserLocating(true);
+    setChooserLocationError(null);
     try {
       const current = await requestLocation();
 
       if (current) {
         updateDraftLocation(current, true);
+        return;
       }
+
+      setChooserLocationError('Couldn\'t refresh location. You can still move the map or paste coordinates.');
     } finally {
       setChooserLocating(false);
     }
@@ -475,6 +493,12 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
               <Text style={styles.help}>Finding your current location...</Text>
             </View>
           ) : null}
+          {locationNotice ? (
+            <View style={styles.locationNotice}>
+              <Feather name="wifi-off" size={15} color={colors.moss} />
+              <Text style={styles.locationNoticeText}>{locationNotice}</Text>
+            </View>
+          ) : null}
           <Pressable
             accessibilityRole="button"
             accessibilityState={{ expanded: manualCoordinatesOpen }}
@@ -600,9 +624,6 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
             )}
           </View>
         </View>
-        {permissionDenied ? (
-          <Text style={styles.help}>Location permission is off. You can still paste coordinates or choose the place on the map.</Text>
-        ) : null}
         <View
           onLayout={(event) => {
             placeSectionTopRef.current = event.nativeEvent.layout.y;
@@ -890,6 +911,12 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
               </Pressable>
             </View>
             <Text style={styles.chooserFooterHelp}>Fine tune the location by moving the map beneath the Cairn marker, or tap a spot to jump there.</Text>
+            {chooserLocationError ? (
+              <View style={styles.chooserLocationNotice}>
+                <Feather name="wifi-off" size={15} color={colors.moss} />
+                <Text style={styles.locationNoticeText}>{chooserLocationError}</Text>
+              </View>
+            ) : null}
           </View>
         </View>
       </Modal>
@@ -1131,6 +1158,26 @@ const styles = StyleSheet.create({
   errorText: {
     color: colors.danger,
     fontSize: type.small,
+  },
+  locationNotice: {
+    minHeight: 42,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(49, 86, 66, 0.14)',
+    backgroundColor: 'rgba(203, 216, 198, 0.24)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  locationNoticeText: {
+    flex: 1,
+    minWidth: 0,
+    color: colors.muted,
+    fontSize: type.small,
+    fontWeight: '700',
+    lineHeight: 18,
   },
   swapButton: {
     minHeight: 44,
@@ -1474,5 +1521,16 @@ const styles = StyleSheet.create({
     color: colors.muted,
     fontSize: type.small,
     lineHeight: 19,
+  },
+  chooserLocationNotice: {
+    minHeight: 40,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
+    borderRadius: 8,
+    backgroundColor: 'rgba(203, 216, 198, 0.24)',
+    paddingHorizontal: spacing.sm,
+    paddingVertical: spacing.xs,
+    marginTop: spacing.sm,
   },
 });
