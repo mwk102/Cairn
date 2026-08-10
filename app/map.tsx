@@ -109,12 +109,20 @@ export default function MapHome() {
   const [filterWidth, setFilterWidth] = useState(0);
   const [searchFocused, setSearchFocusedState] = useState(false);
   const [keyboardTop, setKeyboardTop] = useState<number | null>(null);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
   const { cairns, loading, error, reload } = useCairns();
   const { coordinate, permissionDenied, requestLocation } = useCurrentLocation();
   const mapAvailable = canUseNativeMap();
   const normalMenuHeight = Math.round(windowHeight * 0.76);
+  const keyboardOverlaysWindow = keyboardTop !== null && keyboardTop < windowHeight - spacing.lg;
+  const searchKeyboardLift = searchFocused && keyboardOverlaysWindow
+    ? Math.max(0, keyboardHeight - insets.bottom)
+    : 0;
+  const searchAvailableHeight = keyboardTop
+    ? keyboardTop - insets.top - spacing.sm
+    : windowHeight - searchKeyboardLift - insets.top - spacing.sm;
   const searchMenuHeight = keyboardTop
-    ? Math.max(320, Math.min(Math.round(windowHeight * 0.9), keyboardTop - insets.top - spacing.sm))
+    ? Math.max(320, Math.min(normalMenuHeight, searchAvailableHeight))
     : normalMenuHeight;
   const menuDrawerHeight = searchFocused ? searchMenuHeight : normalMenuHeight;
   const selectedCairn = cairns.find((cairn) => cairn.id === selectedCairnId);
@@ -150,9 +158,11 @@ export default function MapHome() {
   useEffect(() => {
     const showSubscription = Keyboard.addListener('keyboardDidShow', (event) => {
       setKeyboardTop(event.endCoordinates.screenY);
+      setKeyboardHeight(event.endCoordinates.height);
     });
     const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
       setKeyboardTop(null);
+      setKeyboardHeight(0);
     });
 
     return () => {
@@ -869,6 +879,7 @@ export default function MapHome() {
           style={[
             styles.menuSheet,
             {
+              bottom: searchKeyboardLift,
               height: menuDrawerHeight,
               maxHeight: menuDrawerHeight,
               paddingBottom: Math.max(insets.bottom, spacing.sm),

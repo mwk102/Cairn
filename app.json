@@ -42,6 +42,7 @@
     ],
     "android": {
       "package": "com.cairn.placejournal",
+      "versionCode": 3,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#faf8f2"
