@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import MapView, { Circle, Marker, PROVIDER_GOOGLE } from 'react-native-maps';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import Constants from 'expo-constants';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Feather, MaterialIcons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
@@ -155,6 +156,9 @@ export default function MapHome() {
         : FALLBACK_REGION;
   const mapReady = lastSelectionLoaded && (!selectedCairnId || !!selectedCairn || !loading);
   const favoriteCount = cairns.filter((cairn) => cairn.isFavorite).length;
+  const appVersion = Constants.nativeApplicationVersion ?? Constants.expoConfig?.version ?? '0.1.0';
+  const appBuild = Constants.nativeBuildVersion;
+  const versionLabel = appBuild ? `Version ${appVersion} (${appBuild})` : `Version ${appVersion}`;
   const locationNotice = permissionDenied
     ? 'Location is off. Your saved Cairns still work offline.'
     : locationUnavailable
@@ -861,6 +865,7 @@ export default function MapHome() {
               <Feather name="chevron-right" size={20} color={colors.muted} />
             </Pressable>
           </View>
+          <Text style={styles.versionText}>{versionLabel}</Text>
           {__DEV__ ? (
           <View style={styles.migrationBox}>
             <View style={styles.migrationText}>
@@ -1689,6 +1694,13 @@ const styles = StyleSheet.create({
     fontSize: type.small,
     lineHeight: 18,
     marginTop: 2,
+  },
+  versionText: {
+    alignSelf: 'center',
+    color: colors.muted,
+    fontSize: 11,
+    fontWeight: '800',
+    marginTop: spacing.sm,
   },
   menuSheet: {
     position: 'absolute',

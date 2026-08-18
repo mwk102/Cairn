@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Keyboard,
   KeyboardAvoidingView,
@@ -31,6 +32,7 @@ import {
   formatCoordinates,
   formatCoordinateValue,
   parseCoordinateInput,
+  parseCoordinateValue,
   validateCoordinates,
 } from '@/utils/coordinates';
 import { canUseNativeMap } from '@/utils/mapAvailability';
@@ -227,8 +229,8 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
       return false;
     }
 
-    const latitude = Number(latitudeValue);
-    const longitude = Number(longitudeValue);
+    const latitude = parseCoordinateValue(latitudeValue);
+    const longitude = parseCoordinateValue(longitudeValue);
 
     if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
       setCoordinateError('We couldn\'t recognize those coordinates.');
@@ -356,6 +358,8 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
   }
 
   async function save() {
+    if (saving) return;
+
     if (!name.trim()) {
       setError('Name this place before saving.');
       return;
@@ -390,6 +394,12 @@ export function CairnForm({ initial, initialFocus, submitLabel, onSubmit }: Prop
         primaryPhotoUri: savedPrimaryPhotoUri,
         photos: savedPhotos,
       });
+    } catch {
+      const message = initial
+        ? 'Cairn could not save your edits. Your changes are still on this screen.'
+        : 'Cairn could not be built. Your notes are still on this screen.';
+      setError(message);
+      Alert.alert('Save failed', message);
     } finally {
       setSaving(false);
     }

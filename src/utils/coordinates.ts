@@ -14,7 +14,7 @@ type ParsedNumber = {
   direction?: 'N' | 'S' | 'E' | 'W';
 };
 
-const NUMBER_WITH_DIRECTION = /([+-]?\d+(?:\.\d+)?)\s*(?:°|deg|degrees)?\s*([NSEW])?/gi;
+const NUMBER_WITH_DIRECTION = /([+\-\u2212\u2013\u2014]?\d+(?:\.\d+)?)\s*(?:\u00b0|deg|degrees)?\s*([NSEW])?/gi;
 
 export function formatCoordinates(coordinate: CoordinatePair) {
   return `${formatCoordinateValue(coordinate.latitude)}, ${formatCoordinateValue(coordinate.longitude)}`;
@@ -22,6 +22,10 @@ export function formatCoordinates(coordinate: CoordinatePair) {
 
 export function formatCoordinateValue(value: number) {
   return value.toFixed(5);
+}
+
+export function parseCoordinateValue(input: string) {
+  return Number(normalizeNumberText(input.trim()));
 }
 
 export function validateCoordinates(latitude: number, longitude: number): CoordinateParseResult {
@@ -67,6 +71,11 @@ export function parseCoordinateInput(input: string): CoordinateParseResult {
     return { status: 'incomplete', message: 'Enter both latitude and longitude.' };
   }
 
+  if (numbers.length > 2 && looksLikeMapText(normalizedInput)) {
+    const pairResult = parseFirstValidCoordinatePair(numbers);
+    if (pairResult) return pairResult;
+  }
+
   if (numbers.length !== 2) {
     return { status: 'invalid', message: 'We couldn\'t recognize those coordinates.' };
   }
@@ -89,7 +98,7 @@ function extractNumbers(input: string): ParsedNumber[] {
 
   for (const match of input.matchAll(NUMBER_WITH_DIRECTION)) {
     values.push({
-      value: Number(match[1]),
+      value: parseCoordinateValue(match[1]),
       direction: match[2]?.toUpperCase() as ParsedNumber['direction'],
     });
   }
@@ -107,6 +116,29 @@ function valueWithDirection(parsed: ParsedNumber) {
   }
 
   return parsed.value;
+}
+
+function normalizeNumberText(input: string) {
+  return input.replace(/[\u2212\u2013\u2014]/g, '-');
+}
+
+function looksLikeMapText(input: string) {
+  return /(^|[\s/?#&])@/.test(input) || /(?:google|maps|map|lat|lng|longitude|latitude)/i.test(input);
+}
+
+function parseFirstValidCoordinatePair(numbers: ParsedNumber[]) {
+  for (let index = 0; index < numbers.length - 1; index += 1) {
+    const result = validateCoordinates(
+      valueWithDirection(numbers[index]),
+      valueWithDirection(numbers[index + 1]),
+    );
+
+    if (result.status === 'valid' || result.status === 'potentially-reversed') {
+      return result;
+    }
+  }
+
+  return null;
 }
 
 function isValidCoordinate(coordinate: CoordinatePair) {
