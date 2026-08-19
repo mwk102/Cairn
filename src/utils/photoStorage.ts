@@ -63,11 +63,13 @@ export async function persistPickedPhotos(uris: string[]): Promise<PersistPhotoR
 }
 
 export function existingPhotoUris(uris: string[]) {
-  return uris.filter((uri) => {
+  const existing = uris.filter((uri) => {
     try {
       return new File(uri).exists;
     } catch {
       return false;
     }
   });
+
+  return Array.from(new Set(existing));
 }

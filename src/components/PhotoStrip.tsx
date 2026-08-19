@@ -57,11 +57,11 @@ export function PhotoStrip({ photos, onChange }: Props) {
       </Pressable>
       {photos.length > 0 ? (
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photos}>
-          {photos.map((uri) => (
+          {photos.map((uri, index) => (
             <PhotoTile
-              key={uri}
+              key={`${uri}-${index}`}
               uri={uri}
-              onRemove={() => onChange(photos.filter((photo) => photo !== uri))}
+              onRemove={() => onChange(photos.filter((_, photoIndex) => photoIndex !== index))}
             />
           ))}
         </ScrollView>
